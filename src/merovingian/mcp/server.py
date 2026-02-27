@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from merovingian.config import MerovingianConfig
 from merovingian.models.contracts import AuditEntry, Feedback, RepoInfo
-from merovingian.models.enums import ContractType
+from merovingian.models.enums import ContractType, FeedbackOutcome, TargetType
 
 
 def create_server(config: MerovingianConfig | None = None):
@@ -226,8 +226,8 @@ def create_server(config: MerovingianConfig | None = None):
         try:
             fb = Feedback(
                 target_id=target_id,
-                target_type=target_type or "report",
-                outcome=outcome,
+                target_type=TargetType(target_type) if target_type else TargetType.REPORT,
+                outcome=FeedbackOutcome(outcome),
                 context=context or "",
             )
             with MerovingianStore(_config.db_path) as store:

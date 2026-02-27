@@ -8,7 +8,7 @@ import pytest
 
 from merovingian.models.contracts import (
     AuditEntry,
-    BreakingChange,
+    ContractChange,
     Consumer,
     ContractVersion,
     Endpoint,
@@ -17,7 +17,7 @@ from merovingian.models.contracts import (
     RepoInfo,
     SchemaField,
 )
-from merovingian.models.enums import ChangeKind, ContractType, Severity
+from merovingian.models.enums import ChangeKind, ContractType, FeedbackOutcome, Severity, TargetType
 
 
 class TestEnums:
@@ -117,9 +117,9 @@ class TestContractVersion:
             v.endpoints.append(None)  # type: ignore[attr-defined]
 
 
-class TestBreakingChange:
+class TestContractChange:
     def test_creation(self):
-        bc = BreakingChange(
+        bc = ContractChange(
             repo_name="svc", endpoint_method="GET", endpoint_path="/users",
             change_kind=ChangeKind.REMOVED, severity=Severity.BREAKING,
             description="Endpoint removed",
@@ -127,7 +127,7 @@ class TestBreakingChange:
         assert bc.affected_consumers == ()
 
     def test_with_consumers(self):
-        bc = BreakingChange(
+        bc = ContractChange(
             repo_name="svc", endpoint_method="GET", endpoint_path="/users",
             change_kind=ChangeKind.REMOVED, severity=Severity.BREAKING,
             description="Endpoint removed",
@@ -147,9 +147,21 @@ class TestImpactReport:
 
 class TestFeedback:
     def test_creation(self):
-        fb = Feedback(target_id="abc123", target_type="report", outcome="accepted")
+        fb = Feedback(target_id="abc123", target_type=TargetType.REPORT, outcome=FeedbackOutcome.ACCEPTED)
         assert fb.context == ""
         assert isinstance(fb.created_at, datetime)
+        assert fb.target_type == TargetType.REPORT
+        assert fb.outcome == FeedbackOutcome.ACCEPTED
+
+    def test_defaults(self):
+        fb = Feedback(target_id="abc123")
+        assert fb.target_type == TargetType.REPORT
+        assert fb.outcome == FeedbackOutcome.ACCEPTED
+
+    def test_enum_values(self):
+        fb = Feedback(target_id="x", target_type=TargetType.CHANGE, outcome=FeedbackOutcome.REJECTED)
+        assert fb.target_type.value == "change"
+        assert fb.outcome.value == "rejected"
 
 
 class TestAuditEntry:

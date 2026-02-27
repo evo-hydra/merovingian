@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from merovingian.models.contracts import (
     AuditEntry,
-    BreakingChange,
+    ContractChange,
     Consumer,
     ContractVersion,
     Endpoint,
@@ -43,7 +43,7 @@ def format_impact_report(report: ImpactReport) -> str:
     return "\n".join(lines)
 
 
-def format_breaking_changes(changes: list[BreakingChange]) -> str:
+def format_breaking_changes(changes: list[ContractChange]) -> str:
     """Format breaking changes as a severity-tagged list."""
     if not changes:
         return "*No breaking changes detected.*"
@@ -166,7 +166,7 @@ def format_feedback(entries: list[Feedback]) -> str:
     for fb in entries:
         context = fb.context[:50] + "..." if len(fb.context) > 50 else fb.context
         lines.append(
-            f"| `{fb.target_id[:8]}` | {fb.target_type} | {fb.outcome} | "
+            f"| `{fb.target_id[:8]}` | {fb.target_type.value} | {fb.outcome.value} | "
             f"{context} | {fb.created_at.strftime('%Y-%m-%d')} |"
         )
 

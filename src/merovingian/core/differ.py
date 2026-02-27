@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 
-from merovingian.models.contracts import BreakingChange, Endpoint
+from merovingian.models.contracts import ContractChange, Endpoint
 from merovingian.models.enums import ChangeKind, Severity
 
 
 def diff_endpoints(
     old: list[Endpoint], new: list[Endpoint]
-) -> tuple[list[BreakingChange], list[BreakingChange]]:
+) -> tuple[list[ContractChange], list[ContractChange]]:
     """Compare two sets of endpoints and classify changes.
 
     Returns (breaking_changes, non_breaking_changes).
@@ -18,13 +18,13 @@ def diff_endpoints(
     old_map = {(ep.method, ep.path): ep for ep in old}
     new_map = {(ep.method, ep.path): ep for ep in new}
 
-    breaking: list[BreakingChange] = []
-    non_breaking: list[BreakingChange] = []
+    breaking: list[ContractChange] = []
+    non_breaking: list[ContractChange] = []
 
     # Removed endpoints (breaking)
     for key, ep in old_map.items():
         if key not in new_map:
-            breaking.append(BreakingChange(
+            breaking.append(ContractChange(
                 repo_name=ep.repo_name,
                 endpoint_method=ep.method,
                 endpoint_path=ep.path,
@@ -36,7 +36,7 @@ def diff_endpoints(
     # Added endpoints (non-breaking)
     for key, ep in new_map.items():
         if key not in old_map:
-            non_breaking.append(BreakingChange(
+            non_breaking.append(ContractChange(
                 repo_name=ep.repo_name,
                 endpoint_method=ep.method,
                 endpoint_path=ep.path,
@@ -76,7 +76,7 @@ def diff_endpoints(
 
         # Summary change (non-breaking)
         if old_ep.summary != new_ep.summary and new_ep.summary:
-            non_breaking.append(BreakingChange(
+            non_breaking.append(ContractChange(
                 repo_name=old_ep.repo_name,
                 endpoint_method=old_ep.method,
                 endpoint_path=old_ep.path,
@@ -105,14 +105,14 @@ def _diff_schema(
     repo_name: str,
     method: str,
     path: str,
-) -> tuple[list[BreakingChange], list[BreakingChange]]:
+) -> tuple[list[ContractChange], list[ContractChange]]:
     """Diff two schema field dicts with direction-aware breaking logic.
 
     direction="request": adding required field = breaking (consumers don't send it)
     direction="response": removing field = breaking (consumers may depend on it)
     """
-    breaking: list[BreakingChange] = []
-    non_breaking: list[BreakingChange] = []
+    breaking: list[ContractChange] = []
+    non_breaking: list[ContractChange] = []
 
     old_fields = set(old_schema.keys())
     new_fields = set(new_schema.keys())
@@ -120,13 +120,13 @@ def _diff_schema(
     # Fields removed
     for field_name in old_fields - new_fields:
         if direction == "response":
-            breaking.append(BreakingChange(
+            breaking.append(ContractChange(
                 repo_name=repo_name, endpoint_method=method, endpoint_path=path,
                 change_kind=ChangeKind.REMOVED, severity=Severity.BREAKING,
                 description=f"Response field '{field_name}' removed from {method} {path}",
             ))
         else:
-            non_breaking.append(BreakingChange(
+            non_breaking.append(ContractChange(
                 repo_name=repo_name, endpoint_method=method, endpoint_path=path,
                 change_kind=ChangeKind.REMOVED, severity=Severity.INFO,
                 description=f"Request field '{field_name}' removed from {method} {path}",
@@ -138,19 +138,19 @@ def _diff_schema(
         is_required = new_field.get("required", False)
 
         if direction == "request" and is_required:
-            breaking.append(BreakingChange(
+            breaking.append(ContractChange(
                 repo_name=repo_name, endpoint_method=method, endpoint_path=path,
                 change_kind=ChangeKind.ADDED, severity=Severity.BREAKING,
                 description=f"Required request field '{field_name}' added to {method} {path}",
             ))
         elif direction == "response":
-            non_breaking.append(BreakingChange(
+            non_breaking.append(ContractChange(
                 repo_name=repo_name, endpoint_method=method, endpoint_path=path,
                 change_kind=ChangeKind.ADDED, severity=Severity.INFO,
                 description=f"Response field '{field_name}' added to {method} {path}",
             ))
         else:
-            non_breaking.append(BreakingChange(
+            non_breaking.append(ContractChange(
                 repo_name=repo_name, endpoint_method=method, endpoint_path=path,
                 change_kind=ChangeKind.ADDED, severity=Severity.INFO,
                 description=f"Optional request field '{field_name}' added to {method} {path}",
@@ -167,7 +167,7 @@ def _diff_schema(
         # Type changed
         if old_type != new_type:
             if _is_type_widening(old_type, new_type):
-                non_breaking.append(BreakingChange(
+                non_breaking.append(ContractChange(
                     repo_name=repo_name, endpoint_method=method, endpoint_path=path,
                     change_kind=ChangeKind.MODIFIED, severity=Severity.WARNING,
                     description=(
@@ -176,7 +176,7 @@ def _diff_schema(
                     ),
                 ))
             else:
-                breaking.append(BreakingChange(
+                breaking.append(ContractChange(
                     repo_name=repo_name, endpoint_method=method, endpoint_path=path,
                     change_kind=ChangeKind.MODIFIED, severity=Severity.BREAKING,
                     description=(
@@ -191,15 +191,48 @@ def _diff_schema(
         if old_required != new_required:
             if not old_required and new_required:
                 # Optional → required
-                severity = Severity.WARNING
-                non_breaking.append(BreakingChange(
-                    repo_name=repo_name, endpoint_method=method, endpoint_path=path,
-                    change_kind=ChangeKind.MODIFIED, severity=severity,
-                    description=(
-                        f"Field '{field_name}' changed from optional to required "
-                        f"in {direction} of {method} {path}"
-                    ),
-                ))
+                if direction == "request":
+                    # Consumers may not be sending this field — breaking
+                    breaking.append(ContractChange(
+                        repo_name=repo_name, endpoint_method=method, endpoint_path=path,
+                        change_kind=ChangeKind.MODIFIED, severity=Severity.BREAKING,
+                        description=(
+                            f"Field '{field_name}' changed from optional to required "
+                            f"in {direction} of {method} {path}"
+                        ),
+                    ))
+                else:
+                    # Response field becoming required is safe for consumers
+                    non_breaking.append(ContractChange(
+                        repo_name=repo_name, endpoint_method=method, endpoint_path=path,
+                        change_kind=ChangeKind.MODIFIED, severity=Severity.INFO,
+                        description=(
+                            f"Field '{field_name}' changed from optional to required "
+                            f"in {direction} of {method} {path}"
+                        ),
+                    ))
+            else:
+                # Required → optional
+                if direction == "response":
+                    # Consumers relying on guaranteed presence — warning
+                    non_breaking.append(ContractChange(
+                        repo_name=repo_name, endpoint_method=method, endpoint_path=path,
+                        change_kind=ChangeKind.MODIFIED, severity=Severity.WARNING,
+                        description=(
+                            f"Field '{field_name}' changed from required to optional "
+                            f"in {direction} of {method} {path}"
+                        ),
+                    ))
+                else:
+                    # Request field relaxed — safe for consumers
+                    non_breaking.append(ContractChange(
+                        repo_name=repo_name, endpoint_method=method, endpoint_path=path,
+                        change_kind=ChangeKind.MODIFIED, severity=Severity.INFO,
+                        description=(
+                            f"Field '{field_name}' changed from required to optional "
+                            f"in {direction} of {method} {path}"
+                        ),
+                    ))
 
     return breaking, non_breaking
 

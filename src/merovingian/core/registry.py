@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from merovingian.core.store import MerovingianStore
-from merovingian.models.contracts import BreakingChange, Consumer
+from merovingian.models.contracts import ContractChange, Consumer
 
 
 def register_consumer(
@@ -34,10 +34,10 @@ def register_consumer(
 
 def get_affected_consumers(
     store: MerovingianStore,
-    breaking_changes: list[BreakingChange],
-) -> dict[BreakingChange, list[str]]:
+    breaking_changes: list[ContractChange],
+) -> dict[ContractChange, list[str]]:
     """Map each breaking change to its list of affected consumer repo names."""
-    result: dict[BreakingChange, list[str]] = {}
+    result: dict[ContractChange, list[str]] = {}
 
     for change in breaking_changes:
         consumers = store.get_consumers_of(

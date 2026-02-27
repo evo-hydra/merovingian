@@ -11,7 +11,7 @@ from merovingian.core.registry import (
 )
 from merovingian.core.store import MerovingianStore
 from merovingian.models.contracts import (
-    BreakingChange,
+    ContractChange,
     Consumer,
     Endpoint,
     RepoInfo,
@@ -63,7 +63,7 @@ class TestGetAffectedConsumers:
             endpoint_method="GET", endpoint_path="/users/{id}",
         ))
 
-        changes = [BreakingChange(
+        changes = [ContractChange(
             repo_name="users", endpoint_method="GET", endpoint_path="/users/{id}",
             change_kind=ChangeKind.REMOVED, severity=Severity.BREAKING,
             description="Endpoint removed",
@@ -75,7 +75,7 @@ class TestGetAffectedConsumers:
         assert set(consumers) == {"billing", "auth"}
 
     def test_no_consumers(self, store):
-        changes = [BreakingChange(
+        changes = [ContractChange(
             repo_name="users", endpoint_method="GET", endpoint_path="/users",
             change_kind=ChangeKind.MODIFIED, severity=Severity.BREAKING,
             description="Field changed",

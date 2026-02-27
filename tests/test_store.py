@@ -10,7 +10,7 @@ import pytest
 from merovingian.core.store import MerovingianStore
 from merovingian.models.contracts import (
     AuditEntry,
-    BreakingChange,
+    ContractChange,
     Consumer,
     ContractVersion,
     Endpoint,
@@ -18,7 +18,7 @@ from merovingian.models.contracts import (
     ImpactReport,
     RepoInfo,
 )
-from merovingian.models.enums import ChangeKind, ContractType, Severity
+from merovingian.models.enums import ChangeKind, ContractType, FeedbackOutcome, Severity, TargetType
 
 
 @pytest.fixture
@@ -67,6 +67,23 @@ class TestStoreLifecycle:
 
     def test_schema_version(self, store):
         assert store.get_meta("schema_version") == "1"
+
+    def test_schema_version_mismatch_raises(self, tmp_path):
+        """Opening a DB with a different schema version raises RuntimeError."""
+        db_path = tmp_path / "mismatch.db"
+        # Create DB with version 1
+        with MerovingianStore(db_path) as s:
+            pass
+        # Manually set version to something else
+        import sqlite3
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("UPDATE merovingian_meta SET value='99' WHERE key='schema_version'")
+        conn.commit()
+        conn.close()
+        # Re-opening should raise because there's no migration from 99 to 1
+        with pytest.raises(RuntimeError, match="Cannot migrate"):
+            with MerovingianStore(db_path):
+                pass
 
 
 class TestMeta:
@@ -215,7 +232,7 @@ class TestContractVersions:
 
 class TestImpactReports:
     def test_save_and_get(self, populated_store):
-        bc = BreakingChange(
+        bc = ContractChange(
             repo_name="user-service", endpoint_method="GET", endpoint_path="/users",
             change_kind=ChangeKind.REMOVED, severity=Severity.BREAKING,
             description="Endpoint removed", affected_consumers=("billing",),
@@ -245,7 +262,7 @@ class TestImpactReports:
 
 class TestFeedback:
     def test_save_and_list(self, store):
-        fb = Feedback(target_id="rpt123", target_type="report", outcome="accepted", context="LGTM")
+        fb = Feedback(target_id="rpt123", target_type=TargetType.REPORT, outcome=FeedbackOutcome.ACCEPTED, context="LGTM")
         store.save_feedback(fb)
         entries = store.list_feedback()
         assert len(entries) == 1

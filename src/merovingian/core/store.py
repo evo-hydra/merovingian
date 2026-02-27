@@ -9,7 +9,7 @@ from pathlib import Path
 
 from merovingian.models.contracts import (
     AuditEntry,
-    BreakingChange,
+    ContractChange,
     Consumer,
     ContractVersion,
     Endpoint,
@@ -17,7 +17,7 @@ from merovingian.models.contracts import (
     ImpactReport,
     RepoInfo,
 )
-from merovingian.models.enums import ContractType
+from merovingian.models.enums import ContractType, FeedbackOutcome, TargetType
 
 SCHEMA_VERSION = "1"
 
@@ -173,12 +173,37 @@ class MerovingianStore:
         cur = self.conn.execute(
             "SELECT value FROM merovingian_meta WHERE key='schema_version'"
         )
-        if cur.fetchone() is None:
+        row = cur.fetchone()
+        if row is None:
             self.conn.execute(
                 "INSERT INTO merovingian_meta(key, value) VALUES ('schema_version', ?)",
                 (SCHEMA_VERSION,),
             )
             self.conn.commit()
+        else:
+            existing = row[0]
+            if existing != SCHEMA_VERSION:
+                self._run_migrations(existing)
+
+    def _run_migrations(self, from_version: str) -> None:
+        """Run schema migrations from from_version to SCHEMA_VERSION."""
+        migrations: dict[str, str] = {
+            # "1": "ALTER TABLE ...; UPDATE merovingian_meta SET value='2' WHERE key='schema_version';",
+        }
+        current = from_version
+        while current != SCHEMA_VERSION:
+            if current not in migrations:
+                raise RuntimeError(
+                    f"Cannot migrate database from schema v{current} to v{SCHEMA_VERSION}. "
+                    f"No migration path found. Back up and recreate the database."
+                )
+            self.conn.executescript(migrations[current])
+            self.conn.commit()
+            cur = self.conn.execute(
+                "SELECT value FROM merovingian_meta WHERE key='schema_version'"
+            )
+            row = cur.fetchone()
+            current = row[0] if row else SCHEMA_VERSION
 
     # --- Meta ---
 
@@ -473,9 +498,9 @@ class MerovingianStore:
     def _row_to_report(self, row: tuple) -> ImpactReport:
         from merovingian.models.enums import ChangeKind, Severity
 
-        def _parse_changes(data: list[dict]) -> tuple[BreakingChange, ...]:
+        def _parse_changes(data: list[dict]) -> tuple[ContractChange, ...]:
             return tuple(
-                BreakingChange(
+                ContractChange(
                     repo_name=c["repo_name"],
                     endpoint_method=c["endpoint_method"],
                     endpoint_path=c["endpoint_path"],
@@ -515,8 +540,11 @@ class MerovingianStore:
         )
         return [
             Feedback(
-                target_id=r[0], target_type=r[1], outcome=r[2],
-                context=r[3], created_at=_parse_iso(r[4]),
+                target_id=r[0],
+                target_type=TargetType(r[1]),
+                outcome=FeedbackOutcome(r[2]),
+                context=r[3],
+                created_at=_parse_iso(r[4]),
             )
             for r in cur.fetchall()
         ]

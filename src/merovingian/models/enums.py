@@ -27,3 +27,18 @@ class ContractType(str, Enum):
 
     OPENAPI = "openapi"
     PYDANTIC = "pydantic"
+
+
+class FeedbackOutcome(str, Enum):
+    """Outcome of user feedback."""
+
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    MODIFIED = "modified"
+
+
+class TargetType(str, Enum):
+    """Type of target a feedback entry refers to."""
+
+    REPORT = "report"
+    CHANGE = "change"

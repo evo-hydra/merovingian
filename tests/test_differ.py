@@ -131,13 +131,42 @@ class TestTypeChanges:
 
 
 class TestRequiredChanges:
-    def test_optional_to_required_is_warning(self):
+    def test_optional_to_required_request_is_breaking(self):
+        """Making an optional request field required breaks consumers not sending it."""
         old = [_ep(req={"name": {"type": "string", "required": False}})]
         new = [_ep(req={"name": {"type": "string", "required": True}})]
-        _, non_breaking = diff_endpoints(old, new)
+        breaking, _ = diff_endpoints(old, new)
+        assert len(breaking) == 1
+        assert breaking[0].severity == Severity.BREAKING
+        assert "optional to required" in breaking[0].description.lower()
+
+    def test_optional_to_required_response_is_info(self):
+        """Response field becoming required is safe for consumers."""
+        old = [_ep(resp={"name": {"type": "string", "required": False}})]
+        new = [_ep(resp={"name": {"type": "string", "required": True}})]
+        breaking, non_breaking = diff_endpoints(old, new)
+        assert breaking == []
+        info = [c for c in non_breaking if c.severity == Severity.INFO]
+        assert len(info) == 1
+
+    def test_required_to_optional_response_is_warning(self):
+        """Response field becoming optional — consumers may rely on guaranteed presence."""
+        old = [_ep(resp={"name": {"type": "string", "required": True}})]
+        new = [_ep(resp={"name": {"type": "string", "required": False}})]
+        breaking, non_breaking = diff_endpoints(old, new)
+        assert breaking == []
         warnings = [c for c in non_breaking if c.severity == Severity.WARNING]
         assert len(warnings) == 1
-        assert "optional to required" in warnings[0].description.lower()
+        assert "required to optional" in warnings[0].description.lower()
+
+    def test_required_to_optional_request_is_info(self):
+        """Relaxing a request field from required to optional is safe."""
+        old = [_ep(req={"name": {"type": "string", "required": True}})]
+        new = [_ep(req={"name": {"type": "string", "required": False}})]
+        breaking, non_breaking = diff_endpoints(old, new)
+        assert breaking == []
+        info = [c for c in non_breaking if c.severity == Severity.INFO]
+        assert len(info) == 1
 
 
 class TestMixedChanges:

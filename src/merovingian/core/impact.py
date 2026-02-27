@@ -8,11 +8,29 @@ from merovingian.core.registry import get_affected_consumers
 from merovingian.core.scanner import compute_spec_hash, scan_repo
 from merovingian.core.store import MerovingianStore
 from merovingian.models.contracts import (
-    BreakingChange,
+    ContractChange,
     ContractVersion,
     ImpactReport,
-    RepoInfo,
 )
+
+
+def _attach_consumers(
+    changes: list[ContractChange],
+    affected_map: dict[ContractChange, list[str]],
+) -> tuple[ContractChange, ...]:
+    """Return new ContractChange instances with affected_consumers attached."""
+    return tuple(
+        ContractChange(
+            repo_name=c.repo_name,
+            endpoint_method=c.endpoint_method,
+            endpoint_path=c.endpoint_path,
+            change_kind=c.change_kind,
+            severity=c.severity,
+            description=c.description,
+            affected_consumers=tuple(affected_map.get(c, ())),
+        )
+        for c in changes
+    )
 
 
 def assess_impact(
@@ -26,7 +44,7 @@ def assess_impact(
     2. Re-scan repo to get latest endpoints
     3. Diff old vs new
     4. Look up affected consumers
-    5. Attach consumer names to each BreakingChange
+    5. Attach consumer names to each ContractChange
     6. Save new contract version + impact report
     7. Return report
     """
@@ -47,18 +65,7 @@ def assess_impact(
     affected_map = get_affected_consumers(store, breaking)
 
     # 5. Attach consumer names
-    breaking_with_consumers = tuple(
-        BreakingChange(
-            repo_name=bc.repo_name,
-            endpoint_method=bc.endpoint_method,
-            endpoint_path=bc.endpoint_path,
-            change_kind=bc.change_kind,
-            severity=bc.severity,
-            description=bc.description,
-            affected_consumers=tuple(affected_map.get(bc, ())),
-        )
-        for bc in breaking
-    )
+    breaking_with_consumers = _attach_consumers(breaking, affected_map)
 
     # Collect unique consumer count
     all_consumers: set[str] = set()
@@ -94,7 +101,7 @@ def check_breaking(
     store: MerovingianStore,
     repo_name: str,
     config: ScannerConfig,
-) -> list[BreakingChange]:
+) -> list[ContractChange]:
     """Lightweight breaking change check — scan + diff, no persistence."""
     repo = store.get_repo(repo_name)
     if repo is None:
@@ -106,15 +113,4 @@ def check_breaking(
 
     # Attach affected consumers
     affected_map = get_affected_consumers(store, breaking)
-    return [
-        BreakingChange(
-            repo_name=bc.repo_name,
-            endpoint_method=bc.endpoint_method,
-            endpoint_path=bc.endpoint_path,
-            change_kind=bc.change_kind,
-            severity=bc.severity,
-            description=bc.description,
-            affected_consumers=tuple(affected_map.get(bc, ())),
-        )
-        for bc in breaking
-    ]
+    return list(_attach_consumers(breaking, affected_map))

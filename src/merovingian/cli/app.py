@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -11,7 +12,7 @@ from rich.console import Console
 from merovingian.config import MerovingianConfig
 from merovingian.core.store import MerovingianStore
 from merovingian.models.contracts import Consumer, RepoInfo
-from merovingian.models.enums import ContractType
+from merovingian.models.enums import ContractType, FeedbackOutcome, TargetType
 
 app = typer.Typer(
     name="merovingian",
@@ -166,7 +167,7 @@ def add_consumer(
             f"[green]Registered[/green] {consumer} as consumer of "
             f"{producer} {method.upper()} {path}"
         )
-    except ValueError as exc:
+    except (sqlite3.Error, OSError, ValueError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1)
 
@@ -191,7 +192,7 @@ def breaking(repo: str) -> None:
             console.print(f"  [{change.severity.value}] {change.description}")
             if change.affected_consumers:
                 console.print(f"    Affected: {', '.join(change.affected_consumers)}")
-    except ValueError as exc:
+    except (sqlite3.Error, OSError, ValueError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1)
 
@@ -221,7 +222,7 @@ def impact(repo: str) -> None:
 
         if not report.breaking_changes and not report.non_breaking_changes:
             console.print("[green]No changes detected.[/green]")
-    except ValueError as exc:
+    except (sqlite3.Error, OSError, ValueError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1)
 
@@ -304,8 +305,8 @@ def feedback(
     config = _config()
     fb = Feedback(
         target_id=target_id,
-        target_type=target_type or "report",
-        outcome=outcome,
+        target_type=TargetType(target_type) if target_type else TargetType.REPORT,
+        outcome=FeedbackOutcome(outcome),
         context=context or "",
     )
 

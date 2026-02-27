@@ -180,6 +180,123 @@ class TestOpenAPIScanning:
         assert len(endpoints) == 3
 
 
+class TestRecursiveRefResolution:
+    def test_nested_ref(self, tmp_path):
+        """$ref pointing to a schema that itself uses $ref."""
+        spec = """\
+openapi: "3.0.0"
+info:
+  title: Test
+  version: "1.0"
+paths:
+  /items:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemWrapper'
+components:
+  schemas:
+    Item:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required: [id]
+    ItemWrapper:
+      $ref: '#/components/schemas/Item'
+"""
+        (tmp_path / "openapi.yaml").write_text(spec)
+        config = ScannerConfig()
+        endpoints = scan_openapi(tmp_path, config)
+        assert len(endpoints) == 1
+        schema = json.loads(endpoints[0].response_schema)
+        assert "id" in schema
+        assert "name" in schema
+
+    def test_allof_composition(self, tmp_path):
+        """allOf merges multiple schemas into one."""
+        spec = """\
+openapi: "3.0.0"
+info:
+  title: Test
+  version: "1.0"
+paths:
+  /items:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Base'
+                - type: object
+                  properties:
+                    extra:
+                      type: string
+                  required: [extra]
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+components:
+  schemas:
+    Base:
+      type: object
+      properties:
+        name:
+          type: string
+      required: [name]
+"""
+        (tmp_path / "openapi.yaml").write_text(spec)
+        config = ScannerConfig()
+        endpoints = scan_openapi(tmp_path, config)
+        assert len(endpoints) == 1
+        req_schema = json.loads(endpoints[0].request_schema)
+        assert "name" in req_schema
+        assert "extra" in req_schema
+        assert req_schema["name"]["required"] is True
+        assert req_schema["extra"]["required"] is True
+
+    def test_circular_ref_does_not_hang(self, tmp_path):
+        """Circular $ref should not cause infinite recursion."""
+        spec = """\
+openapi: "3.0.0"
+info:
+  title: Test
+  version: "1.0"
+paths:
+  /loop:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/A'
+components:
+  schemas:
+    A:
+      $ref: '#/components/schemas/B'
+    B:
+      $ref: '#/components/schemas/A'
+"""
+        (tmp_path / "openapi.yaml").write_text(spec)
+        config = ScannerConfig()
+        endpoints = scan_openapi(tmp_path, config)
+        # Should not hang, may produce empty schema
+        assert len(endpoints) == 1
+
+
 class TestPydanticScanning:
     def test_scan_finds_models(self, pydantic_repo):
         config = ScannerConfig()

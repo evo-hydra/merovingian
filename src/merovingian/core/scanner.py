@@ -62,19 +62,62 @@ def _parse_openapi_file(spec_file: Path, repo_name: str) -> list[Endpoint]:
     return endpoints
 
 
-def _resolve_ref(ref: str, components_schemas: dict) -> dict:
-    """Resolve a $ref to a schema dict (one level)."""
+def _resolve_ref(
+    ref: str, components_schemas: dict, _seen: set[str] | None = None
+) -> dict:
+    """Resolve a $ref to a schema dict, recursively with cycle detection."""
+    if _seen is None:
+        _seen = set()
+    if ref in _seen:
+        return {}  # cycle detected
+    _seen.add(ref)
+
     prefix = "#/components/schemas/"
-    if ref.startswith(prefix):
-        schema_name = ref[len(prefix):]
-        return components_schemas.get(schema_name, {})
-    return {}
+    if not ref.startswith(prefix):
+        return {}
+
+    schema_name = ref[len(prefix):]
+    resolved = components_schemas.get(schema_name, {})
+    if not isinstance(resolved, dict):
+        return {}
+
+    # Recursively resolve nested $ref
+    if "$ref" in resolved:
+        return _resolve_ref(resolved["$ref"], components_schemas, _seen)
+
+    return resolved
+
+
+def _resolve_schema(schema: dict, components_schemas: dict) -> dict:
+    """Resolve a schema that may use $ref, allOf, anyOf, or oneOf."""
+    if "$ref" in schema:
+        schema = _resolve_ref(schema["$ref"], components_schemas)
+
+    # Merge allOf schemas (common pattern for inheritance/composition)
+    if "allOf" in schema:
+        merged: dict = {}
+        merged_required: list[str] = []
+        for sub_schema in schema["allOf"]:
+            resolved = _resolve_schema(sub_schema, components_schemas)
+            merged.update(resolved.get("properties", {}))
+            merged_required.extend(resolved.get("required", []))
+        return {
+            "type": "object",
+            "properties": merged,
+            "required": merged_required,
+        }
+
+    # For anyOf/oneOf, take the first schema as representative
+    for keyword in ("anyOf", "oneOf"):
+        if keyword in schema and schema[keyword]:
+            return _resolve_schema(schema[keyword][0], components_schemas)
+
+    return schema
 
 
 def _schema_to_fields(schema: dict, components_schemas: dict) -> dict:
     """Convert an OpenAPI schema to a flat field dict: {name: {type, required, default}}."""
-    if "$ref" in schema:
-        schema = _resolve_ref(schema["$ref"], components_schemas)
+    schema = _resolve_schema(schema, components_schemas)
 
     if schema.get("type") != "object" and "properties" not in schema:
         return {}
@@ -84,8 +127,7 @@ def _schema_to_fields(schema: dict, components_schemas: dict) -> dict:
     fields: dict = {}
 
     for field_name, field_schema in properties.items():
-        if "$ref" in field_schema:
-            field_schema = _resolve_ref(field_schema["$ref"], components_schemas)
+        field_schema = _resolve_schema(field_schema, components_schemas)
 
         fields[field_name] = {
             "type": field_schema.get("type", "object"),

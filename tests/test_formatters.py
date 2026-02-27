@@ -17,7 +17,7 @@ from merovingian.mcp.formatters import (
 )
 from merovingian.models.contracts import (
     AuditEntry,
-    BreakingChange,
+    ContractChange,
     Consumer,
     ContractVersion,
     Endpoint,
@@ -25,14 +25,14 @@ from merovingian.models.contracts import (
     ImpactReport,
     RepoInfo,
 )
-from merovingian.models.enums import ChangeKind, ContractType, Severity
+from merovingian.models.enums import ChangeKind, ContractType, FeedbackOutcome, Severity, TargetType
 
 NOW = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
 
 
 class TestFormatImpactReport:
     def test_with_changes(self):
-        bc = BreakingChange(
+        bc = ContractChange(
             repo_name="svc", endpoint_method="GET", endpoint_path="/users",
             change_kind=ChangeKind.REMOVED, severity=Severity.BREAKING,
             description="Endpoint removed", affected_consumers=("billing",),
@@ -51,7 +51,7 @@ class TestFormatImpactReport:
         assert "No changes detected" in result
 
     def test_non_breaking_only(self):
-        nb = BreakingChange(
+        nb = ContractChange(
             repo_name="svc", endpoint_method="POST", endpoint_path="/users",
             change_kind=ChangeKind.ADDED, severity=Severity.INFO,
             description="Endpoint added",
@@ -61,13 +61,13 @@ class TestFormatImpactReport:
         assert "Non-Breaking Changes" in result
 
 
-class TestFormatBreakingChanges:
+class TestFormatContractChanges:
     def test_empty(self):
         result = format_breaking_changes([])
         assert "No breaking changes" in result
 
     def test_with_consumers(self):
-        bc = BreakingChange(
+        bc = ContractChange(
             repo_name="svc", endpoint_method="GET", endpoint_path="/users",
             change_kind=ChangeKind.REMOVED, severity=Severity.BREAKING,
             description="Endpoint removed", affected_consumers=("billing", "auth"),
@@ -156,8 +156,8 @@ class TestFormatFeedback:
         assert "No feedback" in format_feedback([])
 
     def test_entries(self):
-        fb = Feedback(target_id="abc123def456", target_type="report",
-                      outcome="accepted", context="Good", created_at=NOW)
+        fb = Feedback(target_id="abc123def456", target_type=TargetType.REPORT,
+                      outcome=FeedbackOutcome.ACCEPTED, context="Good", created_at=NOW)
         result = format_feedback([fb])
         assert "accepted" in result
         assert "abc123de" in result

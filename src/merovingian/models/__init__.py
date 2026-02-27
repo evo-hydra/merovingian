@@ -2,8 +2,8 @@
 
 from merovingian.models.contracts import (
     AuditEntry,
-    BreakingChange,
     Consumer,
+    ContractChange,
     ContractVersion,
     Endpoint,
     Feedback,
@@ -11,19 +11,27 @@ from merovingian.models.contracts import (
     RepoInfo,
     SchemaField,
 )
-from merovingian.models.enums import ChangeKind, ContractType, Severity
+from merovingian.models.enums import (
+    ChangeKind,
+    ContractType,
+    FeedbackOutcome,
+    Severity,
+    TargetType,
+)
 
 __all__ = [
     "AuditEntry",
-    "BreakingChange",
     "ChangeKind",
     "Consumer",
+    "ContractChange",
     "ContractType",
     "ContractVersion",
     "Endpoint",
     "Feedback",
+    "FeedbackOutcome",
     "ImpactReport",
     "RepoInfo",
     "SchemaField",
     "Severity",
+    "TargetType",
 ]

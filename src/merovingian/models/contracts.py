@@ -6,7 +6,13 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from merovingian.models.enums import ChangeKind, ContractType, Severity
+from merovingian.models.enums import (
+    ChangeKind,
+    ContractType,
+    FeedbackOutcome,
+    Severity,
+    TargetType,
+)
 
 
 def _now() -> datetime:
@@ -75,8 +81,8 @@ class ContractVersion:
 
 
 @dataclass(frozen=True, slots=True)
-class BreakingChange:
-    """A detected change in a contract that may affect consumers."""
+class ContractChange:
+    """A detected change in a contract, with severity indicating impact level."""
 
     repo_name: str
     endpoint_method: str
@@ -93,8 +99,8 @@ class ImpactReport:
 
     repo_name: str
     report_id: str = field(default_factory=_uuid_hex)
-    breaking_changes: tuple[BreakingChange, ...] = ()
-    non_breaking_changes: tuple[BreakingChange, ...] = ()
+    breaking_changes: tuple[ContractChange, ...] = ()
+    non_breaking_changes: tuple[ContractChange, ...] = ()
     consumer_count: int = 0
     created_at: datetime = field(default_factory=_now)
 
@@ -104,8 +110,8 @@ class Feedback:
     """User feedback on a report or change."""
 
     target_id: str
-    target_type: str
-    outcome: str
+    target_type: TargetType = TargetType.REPORT
+    outcome: FeedbackOutcome = FeedbackOutcome.ACCEPTED
     context: str = ""
     created_at: datetime = field(default_factory=_now)
 
