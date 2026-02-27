@@ -27,10 +27,11 @@ def create_server(config: MerovingianConfig | None = None):
 
     def _audit(store, tool_name: str, parameters: dict, result_summary: str) -> None:
         """Log an audit entry for a tool invocation."""
+        max_len = _config.mcp.audit_summary_max_length
         store.log_audit(AuditEntry(
             tool_name=tool_name,
             parameters=json.dumps(parameters),
-            result_summary=result_summary[:200],
+            result_summary=result_summary[:max_len],
         ))
 
     @mcp.tool()

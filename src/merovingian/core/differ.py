@@ -237,11 +237,13 @@ def _diff_schema(
     return breaking, non_breaking
 
 
+_WIDENING_PAIRS: frozenset[tuple[str, str]] = frozenset({
+    ("integer", "number"),
+    ("int", "float"),
+    ("int", "number"),
+})
+
+
 def _is_type_widening(old_type: str, new_type: str) -> bool:
     """Check if a type change is a widening (safe broadening)."""
-    widening_pairs = {
-        ("integer", "number"),
-        ("int", "float"),
-        ("int", "number"),
-    }
-    return (old_type, new_type) in widening_pairs
+    return (old_type, new_type) in _WIDENING_PAIRS

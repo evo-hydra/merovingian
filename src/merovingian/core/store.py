@@ -275,18 +275,20 @@ class MerovingianStore:
 
     def save_endpoints(self, endpoints: list[Endpoint]) -> int:
         """Bulk upsert endpoints. Returns count saved."""
-        count = 0
-        for ep in endpoints:
-            self.conn.execute(
-                "INSERT OR REPLACE INTO endpoints"
-                "(repo_name, method, path, summary, request_schema, response_schema) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+        if not endpoints:
+            return 0
+        self.conn.executemany(
+            "INSERT OR REPLACE INTO endpoints"
+            "(repo_name, method, path, summary, request_schema, response_schema) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [
                 (ep.repo_name, ep.method, ep.path, ep.summary,
-                 ep.request_schema, ep.response_schema),
-            )
-            count += 1
+                 ep.request_schema, ep.response_schema)
+                for ep in endpoints
+            ],
+        )
         self.conn.commit()
-        return count
+        return len(endpoints)
 
     def get_endpoints(self, repo_name: str) -> list[Endpoint]:
         """Get all endpoints for a repository."""

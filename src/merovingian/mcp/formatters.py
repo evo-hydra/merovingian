@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+_TABLE_CELL_MAX_LENGTH = 50
+
 from merovingian.models.contracts import (
     AuditEntry,
     ContractChange,
@@ -60,7 +62,7 @@ def format_breaking_changes(changes: list[ContractChange]) -> str:
     return "\n".join(lines)
 
 
-def format_consumers(consumers: list[Consumer], endpoint: str | None = None) -> str:
+def format_consumers(consumers: list[Consumer]) -> str:
     """Format consumer relationships as a markdown table."""
     if not consumers:
         return "*No consumers registered.*"
@@ -164,7 +166,7 @@ def format_feedback(entries: list[Feedback]) -> str:
         "|--------|------|---------|---------|------|",
     ]
     for fb in entries:
-        context = fb.context[:50] + "..." if len(fb.context) > 50 else fb.context
+        context = fb.context[:_TABLE_CELL_MAX_LENGTH] + "..." if len(fb.context) > _TABLE_CELL_MAX_LENGTH else fb.context
         lines.append(
             f"| `{fb.target_id[:8]}` | {fb.target_type.value} | {fb.outcome.value} | "
             f"{context} | {fb.created_at.strftime('%Y-%m-%d')} |"
@@ -183,10 +185,10 @@ def format_audit(entries: list[AuditEntry]) -> str:
         "|------|-----------|--------|------|",
     ]
     for entry in entries:
-        params = entry.parameters[:40] + "..." if len(entry.parameters) > 40 else entry.parameters
+        params = entry.parameters[:_TABLE_CELL_MAX_LENGTH] + "..." if len(entry.parameters) > _TABLE_CELL_MAX_LENGTH else entry.parameters
         result = (
-            entry.result_summary[:40] + "..."
-            if len(entry.result_summary) > 40
+            entry.result_summary[:_TABLE_CELL_MAX_LENGTH] + "..."
+            if len(entry.result_summary) > _TABLE_CELL_MAX_LENGTH
             else entry.result_summary
         )
         lines.append(

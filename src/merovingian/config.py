@@ -30,6 +30,17 @@ class ScannerConfig:
         "swagger.json",
     )
     pydantic_scan_dirs: tuple[str, ...] = ("src", "app", "lib")
+    http_methods: tuple[str, ...] = (
+        "get", "post", "put", "patch", "delete", "head", "options", "trace",
+    )
+    success_status_codes: tuple[str, ...] = (
+        "200", "201", "202", "203", "204", "206",
+    )
+    json_content_types: tuple[str, ...] = (
+        "application/json",
+        "application/vnd.api+json",
+        "text/json",
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +48,7 @@ class McpConfig:
     """MCP server configuration."""
 
     default_query_limit: int = 50
+    audit_summary_max_length: int = 200
 
 
 @dataclass(frozen=True, slots=True)

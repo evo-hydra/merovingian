@@ -21,12 +21,14 @@ def scan_openapi(repo_path: Path, config: ScannerConfig) -> list[Endpoint]:
 
     for pattern in config.openapi_patterns:
         for spec_file in repo_path.rglob(pattern):
-            endpoints.extend(_parse_openapi_file(spec_file, repo_path.name))
+            endpoints.extend(_parse_openapi_file(spec_file, repo_path.name, config))
 
     return endpoints
 
 
-def _parse_openapi_file(spec_file: Path, repo_name: str) -> list[Endpoint]:
+def _parse_openapi_file(
+    spec_file: Path, repo_name: str, config: ScannerConfig,
+) -> list[Endpoint]:
     """Parse a single OpenAPI spec file into endpoints."""
     with open(spec_file) as f:
         spec = yaml.safe_load(f)
@@ -41,14 +43,19 @@ def _parse_openapi_file(spec_file: Path, repo_name: str) -> list[Endpoint]:
     for path_str, path_item in paths.items():
         if not isinstance(path_item, dict):
             continue
-        for method in ("get", "post", "put", "patch", "delete", "head", "options"):
+        for method in config.http_methods:
             operation = path_item.get(method)
             if not isinstance(operation, dict):
                 continue
 
             summary = operation.get("summary", "")
-            request_schema = _extract_request_schema(operation, components_schemas)
-            response_schema = _extract_response_schema(operation, components_schemas)
+            request_schema = _extract_request_schema(
+                operation, components_schemas, config.json_content_types,
+            )
+            response_schema = _extract_response_schema(
+                operation, components_schemas,
+                config.success_status_codes, config.json_content_types,
+            )
 
             endpoints.append(Endpoint(
                 repo_name=repo_name,
@@ -138,32 +145,44 @@ def _schema_to_fields(schema: dict, components_schemas: dict) -> dict:
     return fields
 
 
-def _extract_request_schema(operation: dict, components_schemas: dict) -> dict:
+def _extract_request_schema(
+    operation: dict,
+    components_schemas: dict,
+    content_types: tuple[str, ...] = ("application/json",),
+) -> dict:
     """Extract request body schema from an operation."""
     request_body = operation.get("requestBody", {})
     if not isinstance(request_body, dict):
         return {}
 
     content = request_body.get("content", {})
-    json_content = content.get("application/json", {})
-    schema = json_content.get("schema", {})
+    for ct in content_types:
+        json_content = content.get(ct, {})
+        schema = json_content.get("schema", {})
+        if schema:
+            return _schema_to_fields(schema, components_schemas)
+    return {}
 
-    return _schema_to_fields(schema, components_schemas)
 
-
-def _extract_response_schema(operation: dict, components_schemas: dict) -> dict:
+def _extract_response_schema(
+    operation: dict,
+    components_schemas: dict,
+    status_codes: tuple[str, ...] = ("200", "201", "202"),
+    content_types: tuple[str, ...] = ("application/json",),
+) -> dict:
     """Extract response schema from the primary success response."""
     responses = operation.get("responses", {})
-    for status_code in ("200", "201", "202"):
+    for status_code in status_codes:
         response = responses.get(status_code, {})
         if not isinstance(response, dict):
             continue
         content = response.get("content", {})
-        json_content = content.get("application/json", {})
-        schema = json_content.get("schema", {})
-        fields = _schema_to_fields(schema, components_schemas)
-        if fields:
-            return fields
+        for ct in content_types:
+            json_content = content.get(ct, {})
+            schema = json_content.get("schema", {})
+            fields = _schema_to_fields(schema, components_schemas)
+            if fields:
+                return fields
     return {}
 
 

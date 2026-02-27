@@ -22,13 +22,6 @@ from merovingian.models.enums import ChangeKind, ContractType, FeedbackOutcome, 
 
 
 @pytest.fixture
-def store(tmp_path):
-    db_path = tmp_path / "test.db"
-    with MerovingianStore(db_path) as s:
-        yield s
-
-
-@pytest.fixture
 def populated_store(store):
     """Store with a registered repo and endpoints."""
     repo = RepoInfo(name="user-service", path="/tmp/users", contract_type=ContractType.OPENAPI)
