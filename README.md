@@ -4,7 +4,7 @@ Cross-repository dependency intelligence for AI agents via MCP.
 
 Merovingian maps cross-repo dependencies — API contracts, shared schemas, consumer relationships — and detects breaking changes before they propagate. It answers: **"What else will break if I change this?"**
 
-Part of the [EvoIntel](https://github.com/evo-hydra) stack (Anno, Sentinel, Seraph, Niobe, Merovingian).
+Part of the [EvoIntel MCP Suite](https://evolvingintelligence.ai) (Sentinel, Niobe, Merovingian, Seraph, Anno).
 
 ## Features
 
@@ -133,6 +133,20 @@ pydantic_scan_dirs = ["src", "app", "lib"]
 [mcp]
 default_query_limit = 50
 ```
+
+## Part of the EvoIntel MCP Suite
+
+Merovingian solves **AI Blindness #3: Cross-Service Dependencies** — API contracts, consumer relationships, and breaking changes that span repository boundaries.
+
+Part of the [EvoIntel MCP Suite](https://evolvingintelligence.ai) by Evolving Intelligence AI: five tools for five blindnesses no model improvement will ever fix.
+
+| Tool | Blindness | Install |
+|------|-----------|---------|
+| [Sentinel](https://github.com/evo-hydra/sentinel) | Project History | `pip install git-sentinel` |
+| [Niobe](https://github.com/evo-hydra/niobe) | Runtime Behavior | `pip install niobe` |
+| **Merovingian** | Cross-Service Dependencies | `pip install merovingian` |
+| [Seraph](https://github.com/evo-hydra/seraph) | Code Quality | `pip install seraph-ai` |
+| [Anno](https://github.com/evo-hydra/anno) | Web Content | `npm install -g @evointel/anno` |
 
 ## License
 
