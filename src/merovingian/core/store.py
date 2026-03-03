@@ -9,8 +9,8 @@ from pathlib import Path
 
 from merovingian.models.contracts import (
     AuditEntry,
-    ContractChange,
     Consumer,
+    ContractChange,
     ContractVersion,
     Endpoint,
     Feedback,
@@ -188,7 +188,8 @@ class MerovingianStore:
     def _run_migrations(self, from_version: str) -> None:
         """Run schema migrations from from_version to SCHEMA_VERSION."""
         migrations: dict[str, str] = {
-            # "1": "ALTER TABLE ...; UPDATE merovingian_meta SET value='2' WHERE key='schema_version';",
+            # "1": "ALTER TABLE ...;
+            # UPDATE merovingian_meta SET value='2' WHERE key='schema_version';",
         }
         current = from_version
         while current != SCHEMA_VERSION:
@@ -226,10 +227,13 @@ class MerovingianStore:
     # --- Repos ---
 
     def register_repo(self, repo: RepoInfo) -> None:
-        """Register a repository."""
+        """Register a repository. Updates path/contract_type if already registered
+        without cascading deletes that would destroy contract history."""
         self.conn.execute(
-            "INSERT OR REPLACE INTO repos(name, path, contract_type, registered_at) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO repos(name, path, contract_type, registered_at) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET "
+            "path=excluded.path, contract_type=excluded.contract_type",
             (repo.name, repo.path, repo.contract_type.value if repo.contract_type else None,
              _iso(repo.registered_at)),
         )
@@ -401,7 +405,8 @@ class MerovingianStore:
             for ep in version.endpoints
         ])
         self.conn.execute(
-            "INSERT INTO contract_versions(version_id, repo_name, spec_hash, endpoints, captured_at) "
+            "INSERT INTO contract_versions"
+            "(version_id, repo_name, spec_hash, endpoints, captured_at) "
             "VALUES (?, ?, ?, ?, ?)",
             (version.version_id, version.repo_name, version.spec_hash,
              endpoints_json, _iso(version.captured_at)),
@@ -468,7 +473,8 @@ class MerovingianStore:
         ])
         self.conn.execute(
             "INSERT INTO impact_reports"
-            "(report_id, repo_name, breaking_changes, non_breaking_changes, consumer_count, created_at) "
+            "(report_id, repo_name, breaking_changes, "
+            "non_breaking_changes, consumer_count, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (report.report_id, report.repo_name, breaking_json, non_breaking_json,
              report.consumer_count, _iso(report.created_at)),
