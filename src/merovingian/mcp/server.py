@@ -64,6 +64,38 @@ def create_server(config: MerovingianConfig | None = None):
             return f"Error: {exc}"
 
     @mcp.tool()
+    def merovingian_scan(name: str) -> str:
+        """Scan a registered repository and ingest its API contracts.
+
+        Must be called after merovingian_register before contracts are visible.
+        Safe to re-run — updates endpoints without deleting contract history.
+
+        Args:
+            name: Repository name (as registered with merovingian_register)
+        """
+        from merovingian.core.store import MerovingianStore
+        from merovingian.core.scanner import compute_spec_hash, scan_repo
+
+        try:
+            with MerovingianStore(_config.db_path) as store:
+                repo_info = store.get_repo(name)
+                if repo_info is None:
+                    return f"Error: Repository '{name}' not registered. Run merovingian_register first."
+
+                endpoints = scan_repo(repo_info, _config.scanner)
+                store.delete_endpoints(name)
+                count = store.save_endpoints(endpoints)
+                spec_hash = compute_spec_hash(endpoints)
+
+                _audit(store, "merovingian_scan",
+                       {"name": name, "endpoint_count": count},
+                       f"Scanned {count} endpoints from '{name}'")
+
+            return f"Scanned '{name}': {count} endpoints discovered (hash: {spec_hash[:12]})"
+        except (sqlite3.Error, OSError, ValueError) as exc:
+            return f"Error: {exc}"
+
+    @mcp.tool()
     def merovingian_consumers(
         producer_repo: str | None = None,
         endpoint_method: str | None = None,
