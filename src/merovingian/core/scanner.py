@@ -14,14 +14,17 @@ from merovingian.models.contracts import Endpoint, RepoInfo
 from merovingian.models.enums import ContractType
 
 
-def scan_openapi(repo_path: Path, config: ScannerConfig) -> list[Endpoint]:
+def scan_openapi(
+    repo_path: Path, config: ScannerConfig, repo_name: str | None = None
+) -> list[Endpoint]:
     """Scan a repository for OpenAPI spec files and extract endpoints."""
     repo_path = Path(repo_path)
+    name = repo_name or repo_path.name
     endpoints: list[Endpoint] = []
 
     for pattern in config.openapi_patterns:
         for spec_file in repo_path.rglob(pattern):
-            endpoints.extend(_parse_openapi_file(spec_file, repo_path.name, config))
+            endpoints.extend(_parse_openapi_file(spec_file, name, config))
 
     return endpoints
 
@@ -134,12 +137,12 @@ def _schema_to_fields(schema: dict, components_schemas: dict) -> dict:
     fields: dict = {}
 
     for field_name, field_schema in properties.items():
-        field_schema = _resolve_schema(field_schema, components_schemas)
+        resolved_schema = _resolve_schema(field_schema, components_schemas)
 
         fields[field_name] = {
-            "type": field_schema.get("type", "object"),
+            "type": resolved_schema.get("type", "object"),
             "required": field_name in required_fields,
-            "default": field_schema.get("default"),
+            "default": resolved_schema.get("default"),
         }
 
     return fields
@@ -186,7 +189,9 @@ def _extract_response_schema(
     return {}
 
 
-def scan_pydantic_models(repo_path: Path, config: ScannerConfig) -> list[Endpoint]:
+def scan_pydantic_models(
+    repo_path: Path, config: ScannerConfig, repo_name: str | None = None
+) -> list[Endpoint]:
     """Scan Python files for Pydantic BaseModel subclasses via AST."""
     repo_path = Path(repo_path)
     endpoints: list[Endpoint] = []
@@ -196,12 +201,14 @@ def scan_pydantic_models(repo_path: Path, config: ScannerConfig) -> list[Endpoin
         if not dir_path.is_dir():
             continue
         for py_file in dir_path.rglob("*.py"):
-            endpoints.extend(_parse_pydantic_file(py_file, repo_path))
+            endpoints.extend(_parse_pydantic_file(py_file, repo_path, repo_name))
 
     return endpoints
 
 
-def _parse_pydantic_file(py_file: Path, repo_path: Path) -> list[Endpoint]:
+def _parse_pydantic_file(
+    py_file: Path, repo_path: Path, repo_name: str | None = None
+) -> list[Endpoint]:
     """Parse a Python file for BaseModel subclasses."""
     try:
         source = py_file.read_text(encoding="utf-8")
@@ -211,7 +218,7 @@ def _parse_pydantic_file(py_file: Path, repo_path: Path) -> list[Endpoint]:
 
     relative = py_file.relative_to(repo_path)
     module_path = str(relative).replace("/", ".").replace("\\", ".").removesuffix(".py")
-    repo_name = repo_path.name
+    repo_name = repo_name or repo_path.name
     endpoints: list[Endpoint] = []
 
     for node in ast.walk(tree):
@@ -304,13 +311,13 @@ def scan_repo(repo_info: RepoInfo, config: ScannerConfig) -> list[Endpoint]:
         return []
 
     if repo_info.contract_type == ContractType.OPENAPI:
-        return scan_openapi(repo_path, config)
+        return scan_openapi(repo_path, config, repo_name=repo_info.name)
     elif repo_info.contract_type == ContractType.PYDANTIC:
-        return scan_pydantic_models(repo_path, config)
+        return scan_pydantic_models(repo_path, config, repo_name=repo_info.name)
     else:
         # Try both
-        endpoints = scan_openapi(repo_path, config)
-        endpoints.extend(scan_pydantic_models(repo_path, config))
+        endpoints = scan_openapi(repo_path, config, repo_name=repo_info.name)
+        endpoints.extend(scan_pydantic_models(repo_path, config, repo_name=repo_info.name))
         return endpoints
 
 
