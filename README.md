@@ -21,7 +21,6 @@ Part of the [EvoIntel MCP Suite](https://evolvingintelligence.ai) (Sentinel, Nio
 
 ```bash
 pip install merovingian
-pip install merovingian[mcp]  # with MCP server support
 ```
 
 ## Quick Start
