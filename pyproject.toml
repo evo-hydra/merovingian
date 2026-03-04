@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "merovingian"
-version = "0.1.2"
+version = "0.1.4"
 description = "Cross-repository dependency intelligence for AI agents via MCP"
 readme = "README.md"
 license = {text = "MIT"}
@@ -28,6 +28,7 @@ dependencies = [
     "rich>=13",
     "pyyaml>=6.0",
     "tomli>=2.0; python_version < '3.11'",
+    "mcp>=1.0,<2.0",
 ]
 
 [project.urls]
@@ -36,7 +37,6 @@ Repository = "https://github.com/evo-hydra/merovingian"
 Issues = "https://github.com/evo-hydra/merovingian/issues"
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.0"]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
