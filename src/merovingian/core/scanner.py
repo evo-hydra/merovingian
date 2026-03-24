@@ -124,9 +124,25 @@ def _resolve_schema(schema: dict, components_schemas: dict) -> dict:
             "required": merged_required,
         }
 
-    # For anyOf/oneOf, take the first schema as representative
+    # For anyOf/oneOf, merge all branches into a union of properties
+    # so the differ can detect changes to any variant
     for keyword in ("anyOf", "oneOf"):
         if keyword in schema and schema[keyword]:
+            merged: dict = {}
+            merged_required: list[str] = []
+            for sub_schema in schema[keyword]:
+                resolved = _resolve_schema(sub_schema, components_schemas)
+                for prop_name, prop_val in resolved.get("properties", {}).items():
+                    if prop_name not in merged:  # first occurrence wins
+                        merged[prop_name] = prop_val
+                merged_required.extend(resolved.get("required", []))
+            if merged:
+                return {
+                    "type": "object",
+                    "properties": merged,
+                    "required": merged_required,
+                }
+            # No properties in any branch — return first branch as fallback
             return _resolve_schema(schema[keyword][0], components_schemas)
 
     return schema
