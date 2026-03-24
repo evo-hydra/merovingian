@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from merovingian.core.store import MerovingianStore
-from merovingian.models.contracts import ContractChange, Consumer
+from merovingian.models.contracts import Consumer, ContractChange
 
 
 def register_consumer(
@@ -49,7 +49,8 @@ def get_affected_consumers(
         if not consumer_names:
             repo_consumers = store.get_consumers_of_repo(change.repo_name)
             for c in repo_consumers:
-                if c.endpoint_method == change.endpoint_method and c.endpoint_path == change.endpoint_path:
+                if (c.endpoint_method == change.endpoint_method
+                        and c.endpoint_path == change.endpoint_path):
                     consumer_names.append(c.consumer_repo)
 
         result[change] = consumer_names

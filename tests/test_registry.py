@@ -11,8 +11,8 @@ from merovingian.core.registry import (
 )
 from merovingian.core.store import MerovingianStore
 from merovingian.models.contracts import (
-    ContractChange,
     Consumer,
+    ContractChange,
     Endpoint,
     RepoInfo,
 )
@@ -23,7 +23,9 @@ from merovingian.models.enums import ChangeKind, ContractType, Severity
 def store(tmp_path):
     with MerovingianStore(tmp_path / "test.db") as s:
         # Register repos
-        s.register_repo(RepoInfo(name="users", path="/tmp/users", contract_type=ContractType.OPENAPI))
+        s.register_repo(RepoInfo(
+            name="users", path="/tmp/users", contract_type=ContractType.OPENAPI,
+        ))
         s.register_repo(RepoInfo(name="billing", path="/tmp/billing"))
         s.register_repo(RepoInfo(name="auth", path="/tmp/auth"))
 

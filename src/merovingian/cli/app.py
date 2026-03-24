@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
 
 from merovingian.config import MerovingianConfig
 from merovingian.core.store import MerovingianStore
-from merovingian.models.contracts import Consumer, RepoInfo
+from merovingian.models.contracts import RepoInfo
 from merovingian.models.enums import ContractType, FeedbackOutcome, TargetType
 
 app = typer.Typer(
@@ -31,7 +30,7 @@ def register(
     name: str,
     path: str,
     contract_type: Annotated[
-        Optional[str], typer.Option("--type", "-t", help="Contract type: openapi or pydantic")
+        str | None, typer.Option("--type", "-t", help="Contract type: openapi or pydantic")
     ] = None,
 ) -> None:
     """Register a repository for contract scanning."""
@@ -112,9 +111,9 @@ def scan(repo: str) -> None:
 
 @app.command(name="consumers")
 def list_consumers(
-    repo: Annotated[Optional[str], typer.Option("--repo", "-r", help="Producer repo")] = None,
+    repo: Annotated[str | None, typer.Option("--repo", "-r", help="Producer repo")] = None,
     endpoint: Annotated[
-        Optional[str], typer.Option("--endpoint", "-e", help="Endpoint as METHOD:PATH")
+        str | None, typer.Option("--endpoint", "-e", help="Endpoint as METHOD:PATH")
     ] = None,
 ) -> None:
     """List consumer relationships."""
@@ -169,7 +168,7 @@ def add_consumer(
         )
     except (sqlite3.Error, OSError, ValueError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -194,7 +193,7 @@ def breaking(repo: str) -> None:
                 console.print(f"    Affected: {', '.join(change.affected_consumers)}")
     except (sqlite3.Error, OSError, ValueError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -224,7 +223,7 @@ def impact(repo: str) -> None:
             console.print("[green]No changes detected.[/green]")
     except (sqlite3.Error, OSError, ValueError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -260,7 +259,7 @@ def contracts(
 
 @app.command()
 def graph(
-    repo: Annotated[Optional[str], typer.Argument(help="Repository name")] = None,
+    repo: Annotated[str | None, typer.Argument(help="Repository name")] = None,
 ) -> None:
     """Show the dependency graph."""
     from merovingian.core.registry import build_dependency_graph
@@ -296,8 +295,8 @@ def graph(
 def feedback(
     target_id: str,
     outcome: str,
-    target_type: Annotated[Optional[str], typer.Option("--type", "-t")] = None,
-    context: Annotated[Optional[str], typer.Option("--context", "-c")] = None,
+    target_type: Annotated[str | None, typer.Option("--type", "-t")] = None,
+    context: Annotated[str | None, typer.Option("--context", "-c")] = None,
 ) -> None:
     """Submit feedback on a report or change."""
     from merovingian.models.contracts import Feedback
@@ -318,8 +317,8 @@ def feedback(
 
 @app.command()
 def audit(
-    tool: Annotated[Optional[str], typer.Option("--tool", "-t")] = None,
-    since: Annotated[Optional[int], typer.Option("--since", "-s", help="Minutes ago")] = None,
+    tool: Annotated[str | None, typer.Option("--tool", "-t")] = None,
+    since: Annotated[int | None, typer.Option("--since", "-s", help="Minutes ago")] = None,
     limit: Annotated[int, typer.Option("--limit", "-n")] = 50,
 ) -> None:
     """Query the audit log."""

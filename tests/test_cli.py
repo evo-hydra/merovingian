@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -21,7 +20,7 @@ runner = CliRunner()
 @pytest.fixture
 def config(tmp_path, monkeypatch):
     """Patch _config to use tmp_path."""
-    cfg = MerovingianConfig(project_path=tmp_path)
+    cfg = MerovingianConfig(data_dir=tmp_path)
 
     def mock_config():
         return cfg

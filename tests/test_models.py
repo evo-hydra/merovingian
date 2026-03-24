@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 
 from merovingian.models.contracts import (
     AuditEntry,
-    ContractChange,
     Consumer,
+    ContractChange,
     ContractVersion,
     Endpoint,
     Feedback,
@@ -147,7 +147,10 @@ class TestImpactReport:
 
 class TestFeedback:
     def test_creation(self):
-        fb = Feedback(target_id="abc123", target_type=TargetType.REPORT, outcome=FeedbackOutcome.ACCEPTED)
+        fb = Feedback(
+            target_id="abc123", target_type=TargetType.REPORT,
+            outcome=FeedbackOutcome.ACCEPTED,
+        )
         assert fb.context == ""
         assert isinstance(fb.created_at, datetime)
         assert fb.target_type == TargetType.REPORT
@@ -159,7 +162,10 @@ class TestFeedback:
         assert fb.outcome == FeedbackOutcome.ACCEPTED
 
     def test_enum_values(self):
-        fb = Feedback(target_id="x", target_type=TargetType.CHANGE, outcome=FeedbackOutcome.REJECTED)
+        fb = Feedback(
+            target_id="x", target_type=TargetType.CHANGE,
+            outcome=FeedbackOutcome.REJECTED,
+        )
         assert fb.target_type.value == "change"
         assert fb.outcome.value == "rejected"
 
