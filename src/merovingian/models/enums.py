@@ -11,7 +11,6 @@ class ChangeKind(str, Enum):
     ADDED = "added"
     REMOVED = "removed"
     MODIFIED = "modified"
-    RENAMED = "renamed"
 
 
 class Severity(str, Enum):

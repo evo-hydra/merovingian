@@ -25,7 +25,6 @@ class TestEnums:
         assert ChangeKind.ADDED.value == "added"
         assert ChangeKind.REMOVED.value == "removed"
         assert ChangeKind.MODIFIED.value == "modified"
-        assert ChangeKind.RENAMED.value == "renamed"
 
     def test_severity_values(self):
         assert Severity.BREAKING.value == "breaking"
