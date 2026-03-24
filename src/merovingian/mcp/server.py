@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 
 from merovingian.config import MerovingianConfig
 from merovingian.models.contracts import AuditEntry, Feedback, RepoInfo
@@ -74,13 +75,25 @@ def create_server(config: MerovingianConfig | None = None):
             name: Repository name (as registered with merovingian_register)
         """
         from merovingian.core.store import MerovingianStore
-        from merovingian.core.scanner import compute_spec_hash, scan_repo
+        from merovingian.core.scanner import compute_spec_hash, has_contracts, scan_repo
 
         try:
             with MerovingianStore(_config.db_path) as store:
                 repo_info = store.get_repo(name)
                 if repo_info is None:
                     return f"Error: Repository '{name}' not registered. Run merovingian_register first."
+
+                # Quick relevance check before full scan
+                repo_path = Path(repo_info.path)
+                if not has_contracts(repo_path, _config.scanner):
+                    _audit(store, "merovingian_scan",
+                           {"name": name, "result": "no_contracts"},
+                           f"No contracts found in '{name}' — skipped")
+                    return (
+                        f"No API contracts detected in '{name}' "
+                        "(no OpenAPI specs or Pydantic models found). "
+                        "Merovingian is designed for projects with cross-service API contracts."
+                    )
 
                 endpoints = scan_repo(repo_info, _config.scanner)
                 store.delete_endpoints(name)
