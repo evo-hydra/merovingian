@@ -149,8 +149,26 @@ def _resolve_schema(schema: dict, components_schemas: dict) -> dict:
 
 
 def _schema_to_fields(schema: dict, components_schemas: dict) -> dict:
-    """Convert an OpenAPI schema to a flat field dict: {name: {type, required, default}}."""
+    """Convert an OpenAPI schema to a flat field dict: {name: {type, required, default}}.
+
+    Handles non-object schemas:
+    - type: array → resolves items schema, returns under __items__ key
+    - primitives → returns synthetic __value__ field with the type
+    """
     schema = _resolve_schema(schema, components_schemas)
+
+    # Array schemas: extract item fields so the differ sees element changes
+    if schema.get("type") == "array" and "items" in schema:
+        items_schema = _resolve_schema(schema["items"], components_schemas)
+        item_fields = _schema_to_fields(items_schema, components_schemas)
+        if item_fields:
+            return {"__items__": {"type": "array", "required": True, "default": None, "fields": item_fields}}
+        return {"__items__": {"type": "array", "required": True, "default": None}}
+
+    # Primitive schemas: capture the type so the differ detects type changes
+    if schema.get("type") in ("string", "integer", "number", "boolean"):
+        if "properties" not in schema:
+            return {"__value__": {"type": schema["type"], "required": True, "default": schema.get("default")}}
 
     if schema.get("type") != "object" and "properties" not in schema:
         return {}

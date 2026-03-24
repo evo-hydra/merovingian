@@ -509,3 +509,85 @@ components: {}
         assert "name" in req
         assert "code" in req
         assert req["value"]["type"] == "string"  # first occurrence wins
+
+
+class TestNonObjectSchemas:
+    """Tests for array and primitive schema extraction."""
+
+    def test_array_response_captures_item_fields(self, tmp_path):
+        """Array responses should have their item fields captured."""
+        spec = """\
+openapi: "3.0.0"
+info:
+  title: Test
+  version: "1.0"
+paths:
+  /users:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required: [id]
+"""
+        (tmp_path / "openapi.yaml").write_text(spec)
+        config = ScannerConfig()
+        endpoints = scan_openapi(tmp_path, config)
+        assert len(endpoints) == 1
+        resp = json.loads(endpoints[0].response_schema)
+        # Should have __items__ with nested fields
+        assert "__items__" in resp
+        assert resp["__items__"]["type"] == "array"
+        assert "id" in resp["__items__"]["fields"]
+        assert "name" in resp["__items__"]["fields"]
+
+    def test_primitive_response_captures_type(self, tmp_path):
+        """Primitive responses should have __value__ with the type."""
+        spec = """\
+openapi: "3.0.0"
+info:
+  title: Test
+  version: "1.0"
+paths:
+  /count:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: integer
+components: {}
+"""
+        (tmp_path / "openapi.yaml").write_text(spec)
+        config = ScannerConfig()
+        endpoints = scan_openapi(tmp_path, config)
+        assert len(endpoints) == 1
+        resp = json.loads(endpoints[0].response_schema)
+        assert "__value__" in resp
+        assert resp["__value__"]["type"] == "integer"
+
+    def test_schema_to_fields_array_without_items(self):
+        """Array without items should still produce __items__ marker."""
+        fields = _schema_to_fields({"type": "array"}, {})
+        # No items key → falls through to empty dict (no info to extract)
+        assert fields == {}
+
+    def test_schema_to_fields_string_type(self):
+        """String type should produce __value__ field."""
+        fields = _schema_to_fields({"type": "string"}, {})
+        assert "__value__" in fields
+        assert fields["__value__"]["type"] == "string"
