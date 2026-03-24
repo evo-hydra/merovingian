@@ -5,9 +5,12 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import logging
 from pathlib import Path
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 from merovingian.config import ScannerConfig
 from merovingian.models.contracts import Endpoint, RepoInfo
@@ -33,8 +36,12 @@ def _parse_openapi_file(
     spec_file: Path, repo_name: str, config: ScannerConfig,
 ) -> list[Endpoint]:
     """Parse a single OpenAPI spec file into endpoints."""
-    with open(spec_file) as f:
-        spec = yaml.safe_load(f)
+    try:
+        with open(spec_file) as f:
+            spec = yaml.safe_load(f)
+    except (yaml.YAMLError, OSError) as exc:
+        logger.warning("Failed to parse OpenAPI file %s: %s", spec_file, exc)
+        return []
 
     if not isinstance(spec, dict):
         return []
@@ -308,6 +315,7 @@ def scan_repo(repo_info: RepoInfo, config: ScannerConfig) -> list[Endpoint]:
     """Scan a repository for contracts based on its type."""
     repo_path = Path(repo_info.path)
     if not repo_path.is_dir():
+        logger.warning("Repo path does not exist or is not a directory: %s", repo_path)
         return []
 
     if repo_info.contract_type == ContractType.OPENAPI:
