@@ -311,6 +311,37 @@ def _get_docstring(node: ast.ClassDef) -> str | None:
     return None
 
 
+def has_contracts(repo_path: Path, config: ScannerConfig) -> bool:
+    """Quick pre-check: does this repo contain any API contracts?
+
+    Returns True if any OpenAPI spec files or Pydantic BaseModel classes
+    are found. Designed to be fast (<100ms) by doing shallow checks only.
+    """
+    repo_path = Path(repo_path)
+    if not repo_path.is_dir():
+        return False
+
+    # Check for OpenAPI specs
+    for pattern in config.openapi_patterns:
+        if any(True for _ in repo_path.rglob(pattern)):
+            return True
+
+    # Check for Pydantic models (look for BaseModel in .py files)
+    for scan_dir in config.pydantic_scan_dirs:
+        dir_path = repo_path / scan_dir
+        if not dir_path.is_dir():
+            continue
+        for py_file in dir_path.rglob("*.py"):
+            try:
+                text = py_file.read_text()
+                if "BaseModel" in text:
+                    return True
+            except OSError:
+                continue
+
+    return False
+
+
 def scan_repo(repo_info: RepoInfo, config: ScannerConfig) -> list[Endpoint]:
     """Scan a repository for contracts based on its type."""
     repo_path = Path(repo_info.path)

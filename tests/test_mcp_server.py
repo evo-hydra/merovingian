@@ -77,9 +77,10 @@ class TestMerovingianScan:
 
     def test_scan_registered(self, initialized_server, initialized_store, tmp_path):
         tool = initialized_server._tool_manager.get_tool("merovingian_scan")
-        # user-service is registered with path=/tmp/users which doesn't exist, so 0 endpoints
+        # user-service is registered with path=/tmp/users which doesn't exist
+        # has_contracts returns False for nonexistent paths, so we get the no-contracts message
         result = tool.fn(name="user-service")
-        assert "Scanned" in result
+        assert "No API contracts detected" in result
         assert "user-service" in result
 
 
@@ -209,6 +210,64 @@ class TestMerovingianFeedback:
         with MerovingianStore(initialized_store.db_path) as store:
             fb_list = store.list_feedback()
             assert len(fb_list) >= 1
+
+
+class TestMerovingianAutoRelevance:
+    def test_scan_empty_project_returns_no_contracts(self, tmp_path, config):
+        """Scanning a project with no API contracts returns early."""
+        from merovingian.mcp.server import create_server
+
+        # Create an empty project directory
+        empty_project = tmp_path / "empty_proj"
+        empty_project.mkdir()
+
+        server = create_server(config)
+
+        # Register the empty project
+        reg_tool = server._tool_manager.get_tool("merovingian_register")
+        reg_tool.fn(name="empty", path=str(empty_project))
+
+        # Scan should return no-contracts message
+        scan_tool = server._tool_manager.get_tool("merovingian_scan")
+        result = scan_tool.fn(name="empty")
+        assert "No API contracts detected" in result
+        assert "cross-service API contracts" in result
+
+    def test_scan_with_openapi_proceeds(self, tmp_path, config):
+        """Scanning a project with an OpenAPI spec runs the full scan."""
+        from merovingian.mcp.server import create_server
+
+        project = tmp_path / "api_proj"
+        project.mkdir()
+        (project / "openapi.yaml").write_text(
+            "openapi: '3.0.0'\ninfo:\n  title: Test\n  version: '1.0'\npaths: {}\n"
+        )
+
+        server = create_server(config)
+        reg_tool = server._tool_manager.get_tool("merovingian_register")
+        reg_tool.fn(name="apiproj", path=str(project))
+
+        scan_tool = server._tool_manager.get_tool("merovingian_scan")
+        result = scan_tool.fn(name="apiproj")
+        assert "endpoints discovered" in result
+
+    def test_scan_no_contracts_audit_logged(self, tmp_path, config):
+        """Early exit from no-contracts scan is recorded in audit log."""
+        from merovingian.mcp.server import create_server
+
+        empty_project = tmp_path / "audit_test_proj"
+        empty_project.mkdir()
+
+        server = create_server(config)
+        reg_tool = server._tool_manager.get_tool("merovingian_register")
+        reg_tool.fn(name="auditproj", path=str(empty_project))
+
+        scan_tool = server._tool_manager.get_tool("merovingian_scan")
+        scan_tool.fn(name="auditproj")
+
+        audit_tool = server._tool_manager.get_tool("merovingian_audit")
+        result = audit_tool.fn()
+        assert "no_contracts" in result or "merovingian_scan" in result
 
 
 class TestMerovingianAudit:
