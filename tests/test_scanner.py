@@ -8,6 +8,7 @@ import pytest
 
 from merovingian.config import ScannerConfig
 from merovingian.core.scanner import (
+    _schema_to_fields,
     compute_spec_hash,
     scan_openapi,
     scan_pydantic_models,
@@ -411,3 +412,100 @@ class TestSpecHash:
         eps = [Endpoint(repo_name="svc", method="GET", path="/a")]
         h = compute_spec_hash(eps)
         assert len(h) == 64
+
+
+class TestUnionSchemaHandling:
+    """Tests for anyOf/oneOf schema merging."""
+
+    def test_oneof_merges_all_branches(self, tmp_path):
+        """oneOf with two object schemas — all fields appear in union."""
+        spec = """\
+openapi: "3.0.0"
+info:
+  title: Test
+  version: "1.0"
+paths:
+  /data:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/User'
+                  - $ref: '#/components/schemas/Admin'
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+    Admin:
+      type: object
+      properties:
+        id:
+          type: integer
+        admin_level:
+          type: integer
+"""
+        (tmp_path / "openapi.yaml").write_text(spec)
+        config = ScannerConfig()
+        endpoints = scan_openapi(tmp_path, config)
+        assert len(endpoints) == 1
+        resp = json.loads(endpoints[0].response_schema)
+        # Both User and Admin fields should appear
+        assert "username" in resp
+        assert "admin_level" in resp
+        assert "id" in resp
+
+    def test_anyof_overlapping_fields_keeps_first(self, tmp_path):
+        """anyOf with overlapping fields — first occurrence's type wins."""
+        spec = """\
+openapi: "3.0.0"
+info:
+  title: Test
+  version: "1.0"
+paths:
+  /items:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - type: object
+                  properties:
+                    value:
+                      type: string
+                    name:
+                      type: string
+                - type: object
+                  properties:
+                    value:
+                      type: integer
+                    code:
+                      type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+components: {}
+"""
+        (tmp_path / "openapi.yaml").write_text(spec)
+        config = ScannerConfig()
+        endpoints = scan_openapi(tmp_path, config)
+        assert len(endpoints) == 1
+        req = json.loads(endpoints[0].request_schema)
+        # Union: name (from first), code (from second), value (first wins = string)
+        assert "name" in req
+        assert "code" in req
+        assert req["value"]["type"] == "string"  # first occurrence wins
