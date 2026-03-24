@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from merovingian.models.contracts import (
     AuditEntry,
@@ -118,6 +122,17 @@ CREATE TRIGGER IF NOT EXISTS endpoint_fts_au AFTER UPDATE ON endpoints BEGIN
     VALUES (new.id, new.path, COALESCE(new.summary, ''));
 END;
 """
+
+
+def _safe_json_loads(raw: str | None, default: Any = None, context: str = "") -> Any:
+    """Parse JSON from a database column, returning default on failure."""
+    if raw is None:
+        return default if default is not None else []
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Corrupt JSON in DB column%s: %s", f" ({context})" if context else "", raw[:100])
+        return default if default is not None else []
 
 
 def _iso(dt: datetime) -> str:
@@ -435,7 +450,7 @@ class MerovingianStore:
         return [self._row_to_version(r) for r in cur.fetchall()]
 
     def _row_to_version(self, row: tuple) -> ContractVersion:
-        endpoints_data = json.loads(row[3])
+        endpoints_data = _safe_json_loads(row[3], default=[], context="version.endpoints")
         endpoints = tuple(
             Endpoint(
                 repo_name=ep["repo_name"], method=ep["method"], path=ep["path"],
@@ -520,8 +535,8 @@ class MerovingianStore:
                 for c in data
             )
 
-        breaking = _parse_changes(json.loads(row[2]))
-        non_breaking = _parse_changes(json.loads(row[3]))
+        breaking = _parse_changes(_safe_json_loads(row[2], default=[], context="report.breaking"))
+        non_breaking = _parse_changes(_safe_json_loads(row[3], default=[], context="report.non_breaking"))
         return ImpactReport(
             report_id=row[0], repo_name=row[1],
             breaking_changes=breaking, non_breaking_changes=non_breaking,
