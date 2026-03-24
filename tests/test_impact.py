@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -102,7 +101,7 @@ class TestAssessImpact:
         current_endpoints = store.get_endpoints("user-service")
 
         with patch("merovingian.core.impact.scan_repo", return_value=current_endpoints):
-            report = assess_impact(store, "user-service", config)
+            assess_impact(store, "user-service", config)
 
         versions = store.list_versions("user-service")
         assert len(versions) >= 1

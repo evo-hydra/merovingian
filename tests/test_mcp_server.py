@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -16,7 +14,7 @@ from merovingian.models.enums import ContractType
 
 @pytest.fixture
 def config(tmp_path):
-    return MerovingianConfig(project_path=tmp_path)
+    return MerovingianConfig(data_dir=tmp_path)
 
 
 @pytest.fixture
@@ -68,6 +66,54 @@ class TestMerovingianRegister:
         tool = server._tool_manager.get_tool("merovingian_register")
         result = tool.fn(name="bad", path="/tmp/bad", contract_type="invalid")
         assert "Error" in result
+
+
+class TestMerovingianScan:
+    def test_scan_unregistered(self, server):
+        tool = server._tool_manager.get_tool("merovingian_scan")
+        result = tool.fn(name="nonexistent")
+        assert "Error" in result
+        assert "not registered" in result
+
+    def test_scan_registered(self, initialized_server, initialized_store, tmp_path):
+        tool = initialized_server._tool_manager.get_tool("merovingian_scan")
+        # user-service is registered with path=/tmp/users which doesn't exist, so 0 endpoints
+        result = tool.fn(name="user-service")
+        assert "Scanned" in result
+        assert "user-service" in result
+
+
+class TestMerovingianAddConsumer:
+    def test_add_consumer(self, initialized_server, initialized_store):
+        tool = initialized_server._tool_manager.get_tool("merovingian_add_consumer")
+        result = tool.fn(
+            consumer_repo="billing-service",
+            producer_repo="user-service",
+            endpoint_method="GET",
+            endpoint_path="/users",
+        )
+        assert "Registered" in result
+        assert "billing-service" in result
+        assert "user-service" in result
+
+        # Verify it persisted
+        with MerovingianStore(initialized_store.db_path) as store:
+            consumers = store.get_consumers_of_repo("user-service")
+            assert any(c.consumer_repo == "billing-service" for c in consumers)
+
+    def test_add_consumer_normalizes_method(self, initialized_server, initialized_store):
+        tool = initialized_server._tool_manager.get_tool("merovingian_add_consumer")
+        result = tool.fn(
+            consumer_repo="notify-service",
+            producer_repo="user-service",
+            endpoint_method="get",
+            endpoint_path="/users",
+        )
+        assert "Registered" in result
+
+        with MerovingianStore(initialized_store.db_path) as store:
+            consumers = store.get_consumers_of_repo("user-service")
+            assert any(c.consumer_repo == "notify-service" for c in consumers)
 
 
 class TestMerovingianConsumers:

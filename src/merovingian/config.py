@@ -12,6 +12,28 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 
+def _default_data_dir() -> Path:
+    """Return the default data directory (XDG-compliant).
+
+    Merovingian is a cross-repo tool, so data lives in a user-level
+    directory rather than per-project.
+
+    Resolution order:
+      1. $MEROVINGIAN_DATA_DIR (explicit override)
+      2. $XDG_DATA_HOME/merovingian
+      3. ~/.local/share/merovingian
+    """
+    env_dir = os.environ.get("MEROVINGIAN_DATA_DIR")
+    if env_dir:
+        return Path(env_dir)
+
+    xdg_data = os.environ.get("XDG_DATA_HOME")
+    if xdg_data:
+        return Path(xdg_data) / "merovingian"
+
+    return Path.home() / ".local" / "share" / "merovingian"
+
+
 @dataclass(frozen=True, slots=True)
 class StoreConfig:
     """SQLite store configuration."""
@@ -55,7 +77,7 @@ class McpConfig:
 class MerovingianConfig:
     """Top-level configuration container."""
 
-    project_path: Path = field(default_factory=Path.cwd)
+    data_dir: Path = field(default_factory=_default_data_dir)
     store: StoreConfig = field(default_factory=StoreConfig)
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
@@ -63,7 +85,7 @@ class MerovingianConfig:
     @property
     def merovingian_dir(self) -> Path:
         """Directory for Merovingian data files."""
-        return self.project_path / ".merovingian"
+        return self.data_dir
 
     @property
     def db_path(self) -> Path:
@@ -71,10 +93,10 @@ class MerovingianConfig:
         return self.merovingian_dir / self.store.db_name
 
     @classmethod
-    def load(cls, project_path: Path | None = None) -> MerovingianConfig:
+    def load(cls, data_dir: Path | None = None) -> MerovingianConfig:
         """Load config: TOML file -> env vars -> defaults."""
-        project = Path(project_path) if project_path else Path.cwd()
-        toml_path = project / ".merovingian" / "config.toml"
+        resolved_dir = Path(data_dir) if data_dir else _default_data_dir()
+        toml_path = resolved_dir / "config.toml"
 
         toml_data: dict = {}
         if toml_path.is_file():
@@ -116,4 +138,4 @@ class MerovingianConfig:
             ),
         )
 
-        return cls(project_path=project, store=store, scanner=scanner, mcp=mcp)
+        return cls(data_dir=resolved_dir, store=store, scanner=scanner, mcp=mcp)

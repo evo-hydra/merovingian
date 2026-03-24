@@ -96,6 +96,48 @@ def create_server(config: MerovingianConfig | None = None):
             return f"Error: {exc}"
 
     @mcp.tool()
+    def merovingian_add_consumer(
+        consumer_repo: str,
+        producer_repo: str,
+        endpoint_method: str,
+        endpoint_path: str,
+    ) -> str:
+        """Register a consumer relationship between two repositories.
+
+        Call this to tell Merovingian that consumer_repo calls an endpoint
+        on producer_repo. Once registered, merovingian_impact will include
+        this relationship in its blast radius analysis.
+
+        Args:
+            consumer_repo: Name of the repo that calls the endpoint (e.g. 'zado-desktop')
+            producer_repo: Name of the repo that owns the endpoint (e.g. 'zado-backend')
+            endpoint_method: HTTP method (e.g. 'GET', 'POST')
+            endpoint_path: Endpoint path (e.g. '/api/v1/transactions')
+        """
+        from merovingian.core.store import MerovingianStore
+        from merovingian.core.registry import register_consumer
+
+        try:
+            with MerovingianStore(_config.db_path) as store:
+                register_consumer(
+                    store,
+                    consumer_repo,
+                    producer_repo,
+                    endpoint_method.upper(),
+                    endpoint_path,
+                )
+                _audit(store, "merovingian_add_consumer",
+                       {"consumer": consumer_repo, "producer": producer_repo,
+                        "method": endpoint_method, "path": endpoint_path},
+                       f"Registered {consumer_repo} as consumer of "
+                       f"{producer_repo} {endpoint_method.upper()} {endpoint_path}")
+
+            return (f"Registered '{consumer_repo}' as consumer of "
+                    f"'{producer_repo}' {endpoint_method.upper()} {endpoint_path}")
+        except (sqlite3.Error, OSError, ValueError) as exc:
+            return f"Error: {exc}"
+
+    @mcp.tool()
     def merovingian_consumers(
         producer_repo: str | None = None,
         endpoint_method: str | None = None,

@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import pytest
 
-from merovingian.config import MerovingianConfig, McpConfig, ScannerConfig, StoreConfig
+from merovingian.config import McpConfig, MerovingianConfig, ScannerConfig, StoreConfig
 
 
 class TestStoreConfig:
@@ -47,22 +44,20 @@ class TestMerovingianConfig:
         assert isinstance(cfg.mcp, McpConfig)
 
     def test_merovingian_dir(self, tmp_path):
-        cfg = MerovingianConfig(project_path=tmp_path)
-        assert cfg.merovingian_dir == tmp_path / ".merovingian"
+        cfg = MerovingianConfig(data_dir=tmp_path)
+        assert cfg.merovingian_dir == tmp_path
 
     def test_db_path(self, tmp_path):
-        cfg = MerovingianConfig(project_path=tmp_path)
-        assert cfg.db_path == tmp_path / ".merovingian" / "merovingian.db"
+        cfg = MerovingianConfig(data_dir=tmp_path)
+        assert cfg.db_path == tmp_path / "merovingian.db"
 
     def test_load_defaults(self, tmp_path):
         cfg = MerovingianConfig.load(tmp_path)
-        assert cfg.project_path == tmp_path
+        assert cfg.data_dir == tmp_path
         assert cfg.store.db_name == "merovingian.db"
 
     def test_load_from_toml(self, tmp_path):
-        toml_dir = tmp_path / ".merovingian"
-        toml_dir.mkdir()
-        toml_file = toml_dir / "config.toml"
+        toml_file = tmp_path / "config.toml"
         toml_file.write_text(
             '[store]\ndb_name = "custom.db"\n\n'
             "[mcp]\ndefault_query_limit = 100\n"
@@ -73,9 +68,7 @@ class TestMerovingianConfig:
         assert cfg.mcp.default_query_limit == 100
 
     def test_env_overrides_toml(self, tmp_path, monkeypatch):
-        toml_dir = tmp_path / ".merovingian"
-        toml_dir.mkdir()
-        toml_file = toml_dir / "config.toml"
+        toml_file = tmp_path / "config.toml"
         toml_file.write_text('[store]\ndb_name = "from_toml.db"\n')
 
         monkeypatch.setenv("MEROVINGIAN_DB_NAME", "from_env.db")
@@ -90,9 +83,7 @@ class TestMerovingianConfig:
         assert cfg.mcp.default_query_limit == 200
 
     def test_scanner_config_from_toml(self, tmp_path):
-        toml_dir = tmp_path / ".merovingian"
-        toml_dir.mkdir()
-        toml_file = toml_dir / "config.toml"
+        toml_file = tmp_path / "config.toml"
         toml_file.write_text(
             '[scanner]\nopenapi_patterns = ["api.yaml"]\npydantic_scan_dirs = ["models"]\n'
         )

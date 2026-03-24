@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from merovingian.core.differ import diff_endpoints
 from merovingian.models.contracts import Endpoint
 from merovingian.models.enums import ChangeKind, Severity

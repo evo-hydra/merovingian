@@ -17,8 +17,8 @@ from merovingian.mcp.formatters import (
 )
 from merovingian.models.contracts import (
     AuditEntry,
-    ContractChange,
     Consumer,
+    ContractChange,
     ContractVersion,
     Endpoint,
     Feedback,
