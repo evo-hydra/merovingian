@@ -9,3 +9,4 @@ build/
 .merovingian/
 .mcp.json
 .env
+.sentinel/
