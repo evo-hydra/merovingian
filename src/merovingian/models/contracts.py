@@ -123,4 +123,6 @@ class AuditEntry:
     tool_name: str
     parameters: str  # JSON string
     result_summary: str
+    payload_bytes: int = 0
+    findings_count: int = 0
     created_at: datetime = field(default_factory=_now)

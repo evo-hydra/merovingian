@@ -23,7 +23,7 @@ from merovingian.models.contracts import (
 )
 from merovingian.models.enums import ContractType, FeedbackOutcome, TargetType
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 _SCHEMA_SQL = """\
 CREATE TABLE IF NOT EXISTS merovingian_meta (
@@ -95,6 +95,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
     tool_name      TEXT NOT NULL,
     parameters     TEXT NOT NULL,
     result_summary TEXT NOT NULL,
+    payload_bytes  INTEGER NOT NULL DEFAULT 0,
+    findings_count INTEGER NOT NULL DEFAULT 0,
     created_at     TEXT NOT NULL
 );
 
@@ -200,21 +202,40 @@ class MerovingianStore:
             if existing != SCHEMA_VERSION:
                 self._run_migrations(existing)
 
+    def _migrate_v1_to_v2(self) -> None:
+        """v2: Add payload_bytes and findings_count to audit_log for MCP usage telemetry.
+
+        Idempotent: SQLite ALTER TABLE ADD COLUMN has no IF NOT EXISTS, so we
+        check PRAGMA table_info before altering.
+        """
+        existing_cols = {row[1] for row in self.conn.execute("PRAGMA table_info(audit_log)")}
+        if "payload_bytes" not in existing_cols:
+            self.conn.execute(
+                "ALTER TABLE audit_log ADD COLUMN payload_bytes INTEGER NOT NULL DEFAULT 0"
+            )
+        if "findings_count" not in existing_cols:
+            self.conn.execute(
+                "ALTER TABLE audit_log ADD COLUMN findings_count INTEGER NOT NULL DEFAULT 0"
+            )
+        self.conn.execute(
+            "UPDATE merovingian_meta SET value='2' WHERE key='schema_version'"
+        )
+        self.conn.commit()
+
     def _run_migrations(self, from_version: str) -> None:
         """Run schema migrations from from_version to SCHEMA_VERSION."""
-        migrations: dict[str, str] = {
-            # "1": "ALTER TABLE ...;
-            # UPDATE merovingian_meta SET value='2' WHERE key='schema_version';",
+        migration_fns = {
+            "1": self._migrate_v1_to_v2,
         }
         current = from_version
         while current != SCHEMA_VERSION:
-            if current not in migrations:
+            migrate_fn = migration_fns.get(current)
+            if migrate_fn is None:
                 raise RuntimeError(
                     f"Cannot migrate database from schema v{current} to v{SCHEMA_VERSION}. "
                     f"No migration path found. Back up and recreate the database."
                 )
-            self.conn.executescript(migrations[current])
-            self.conn.commit()
+            migrate_fn()
             cur = self.conn.execute(
                 "SELECT value FROM merovingian_meta WHERE key='schema_version'"
             )
@@ -577,9 +598,18 @@ class MerovingianStore:
     def log_audit(self, entry: AuditEntry) -> None:
         """Log an audit entry."""
         self.conn.execute(
-            "INSERT INTO audit_log(tool_name, parameters, result_summary, created_at) "
-            "VALUES (?, ?, ?, ?)",
-            (entry.tool_name, entry.parameters, entry.result_summary, _iso(entry.created_at)),
+            "INSERT INTO audit_log("
+            "tool_name, parameters, result_summary, "
+            "payload_bytes, findings_count, created_at"
+            ") VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                entry.tool_name,
+                entry.parameters,
+                entry.result_summary,
+                entry.payload_bytes,
+                entry.findings_count,
+                _iso(entry.created_at),
+            ),
         )
         self.conn.commit()
 
@@ -601,14 +631,19 @@ class MerovingianStore:
 
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         cur = self.conn.execute(
-            f"SELECT tool_name, parameters, result_summary, created_at "
+            f"SELECT tool_name, parameters, result_summary, "
+            f"payload_bytes, findings_count, created_at "
             f"FROM audit_log{where} ORDER BY created_at DESC LIMIT ?",
             (*params, limit),
         )
         return [
             AuditEntry(
-                tool_name=r[0], parameters=r[1],
-                result_summary=r[2], created_at=_parse_iso(r[3]),
+                tool_name=r[0],
+                parameters=r[1],
+                result_summary=r[2],
+                payload_bytes=r[3],
+                findings_count=r[4],
+                created_at=_parse_iso(r[5]),
             )
             for r in cur.fetchall()
         ]

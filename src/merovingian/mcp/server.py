@@ -26,13 +26,26 @@ def create_server(config: MerovingianConfig | None = None):
     )
     _config = config or MerovingianConfig.load()
 
-    def _audit(store, tool_name: str, parameters: dict, result_summary: str) -> None:
-        """Log an audit entry for a tool invocation."""
+    def _audit(
+        store,
+        tool_name: str,
+        parameters: dict,
+        full_result: str,
+        findings_count: int = 0,
+    ) -> None:
+        """Log an audit entry for a tool invocation.
+
+        payload_bytes is the UTF-8 byte length of the full result string
+        returned to the caller. findings_count is the number of gate findings
+        (breaking changes, impact items) surfaced — 0 for non-finding tools.
+        """
         max_len = _config.mcp.audit_summary_max_length
         store.log_audit(AuditEntry(
             tool_name=tool_name,
             parameters=json.dumps(parameters),
-            result_summary=result_summary[:max_len],
+            result_summary=full_result[:max_len],
+            payload_bytes=len(full_result.encode("utf-8")),
+            findings_count=findings_count,
         ))
 
     @mcp.tool()
@@ -56,11 +69,12 @@ def create_server(config: MerovingianConfig | None = None):
 
             with MerovingianStore(_config.db_path) as store:
                 store.register_repo(repo)
+                result = f"Registered repository '{name}' at {path}"
                 _audit(store, "merovingian_register",
                        {"name": name, "path": path, "contract_type": contract_type},
-                       f"Registered repo '{name}'")
+                       result)
 
-            return f"Registered repository '{name}' at {path}"
+            return result
         except (sqlite3.Error, OSError, ValueError) as exc:
             return f"Error: {exc}"
 
@@ -86,25 +100,27 @@ def create_server(config: MerovingianConfig | None = None):
                 # Quick relevance check before full scan
                 repo_path = Path(repo_info.path)
                 if not has_contracts(repo_path, _config.scanner):
-                    _audit(store, "merovingian_scan",
-                           {"name": name, "result": "no_contracts"},
-                           f"No contracts found in '{name}' — skipped")
-                    return (
+                    result = (
                         f"No API contracts detected in '{name}' "
                         "(no OpenAPI specs or Pydantic models found). "
                         "Merovingian is designed for projects with cross-service API contracts."
                     )
+                    _audit(store, "merovingian_scan",
+                           {"name": name, "result": "no_contracts"},
+                           result)
+                    return result
 
                 endpoints = scan_repo(repo_info, _config.scanner)
                 store.delete_endpoints(name)
                 count = store.save_endpoints(endpoints)
                 spec_hash = compute_spec_hash(endpoints)
 
+                result = f"Scanned '{name}': {count} endpoints discovered (hash: {spec_hash[:12]})"
                 _audit(store, "merovingian_scan",
                        {"name": name, "endpoint_count": count},
-                       f"Scanned {count} endpoints from '{name}'")
+                       result)
 
-            return f"Scanned '{name}': {count} endpoints discovered (hash: {spec_hash[:12]})"
+            return result
         except (sqlite3.Error, OSError, ValueError) as exc:
             return f"Error: {exc}"
 
@@ -139,14 +155,16 @@ def create_server(config: MerovingianConfig | None = None):
                     endpoint_method.upper(),
                     endpoint_path,
                 )
+                result = (
+                    f"Registered '{consumer_repo}' as consumer of "
+                    f"'{producer_repo}' {endpoint_method.upper()} {endpoint_path}"
+                )
                 _audit(store, "merovingian_add_consumer",
                        {"consumer": consumer_repo, "producer": producer_repo,
                         "method": endpoint_method, "path": endpoint_path},
-                       f"Registered {consumer_repo} as consumer of "
-                       f"{producer_repo} {endpoint_method.upper()} {endpoint_path}")
+                       result)
 
-            return (f"Registered '{consumer_repo}' as consumer of "
-                    f"'{producer_repo}' {endpoint_method.upper()} {endpoint_path}")
+            return result
         except (sqlite3.Error, OSError, ValueError) as exc:
             return f"Error: {exc}"
 
@@ -184,7 +202,7 @@ def create_server(config: MerovingianConfig | None = None):
                 _audit(store, "merovingian_consumers",
                        {"producer_repo": producer_repo, "endpoint_method": endpoint_method,
                         "endpoint_path": endpoint_path},
-                       f"{len(consumers)} consumers found")
+                       result)
 
             return result
         except (sqlite3.Error, OSError) as exc:
@@ -207,7 +225,8 @@ def create_server(config: MerovingianConfig | None = None):
                 result = format_breaking_changes(changes)
                 _audit(store, "merovingian_breaking",
                        {"repo_name": repo_name},
-                       f"{len(changes)} breaking changes")
+                       result,
+                       findings_count=len(changes))
 
             return result
         except (sqlite3.Error, OSError, ValueError) as exc:
@@ -230,8 +249,10 @@ def create_server(config: MerovingianConfig | None = None):
                 result = format_impact_report(report)
                 _audit(store, "merovingian_impact",
                        {"repo_name": repo_name},
-                       f"{len(report.breaking_changes)} breaking, "
-                       f"{len(report.non_breaking_changes)} non-breaking")
+                       result,
+                       findings_count=(
+                           len(report.breaking_changes) + len(report.non_breaking_changes)
+                       ))
 
             return result
         except (sqlite3.Error, OSError, ValueError) as exc:
@@ -259,7 +280,7 @@ def create_server(config: MerovingianConfig | None = None):
                 result = format_contract_versions(versions)
                 _audit(store, "merovingian_contracts",
                        {"repo_name": repo_name, "limit": limit},
-                       f"{len(versions)} versions")
+                       result)
 
             return result
         except (sqlite3.Error, OSError) as exc:
@@ -288,7 +309,7 @@ def create_server(config: MerovingianConfig | None = None):
                 result = format_dependency_graph(graph)
                 _audit(store, "merovingian_graph",
                        {"repo_name": repo_name},
-                       f"{len(graph)} repos in graph")
+                       result)
 
             return result
         except (sqlite3.Error, OSError) as exc:
@@ -320,11 +341,12 @@ def create_server(config: MerovingianConfig | None = None):
             )
             with MerovingianStore(_config.db_path) as store:
                 store.save_feedback(fb)
+                result = f"Feedback recorded: {outcome} for {target_id[:8]}"
                 _audit(store, "merovingian_feedback",
                        {"target_id": target_id, "outcome": outcome},
-                       f"Feedback recorded: {outcome}")
+                       result)
 
-            return f"Feedback recorded: {outcome} for {target_id[:8]}"
+            return result
         except (sqlite3.Error, OSError) as exc:
             return f"Error: {exc}"
 

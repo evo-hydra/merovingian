@@ -56,7 +56,7 @@ class TestStoreLifecycle:
             assert db_path.exists()
 
     def test_schema_version(self, store):
-        assert store.get_meta("schema_version") == "1"
+        assert store.get_meta("schema_version") == "2"
 
     def test_schema_version_mismatch_raises(self, tmp_path):
         """Opening a DB with a different schema version raises RuntimeError."""
@@ -285,3 +285,87 @@ class TestAudit:
             store.log_audit(AuditEntry(tool_name=f"tool_{i}", parameters="{}", result_summary="ok"))
         results = store.query_audit(limit=3)
         assert len(results) == 3
+
+    def test_payload_bytes_and_findings_count_roundtrip(self, store):
+        """v2: payload_bytes + findings_count round-trip through log+query."""
+        store.log_audit(AuditEntry(
+            tool_name="merovingian_breaking",
+            parameters='{"repo_name": "acme-api"}',
+            result_summary="3 breaking changes",
+            payload_bytes=4096,
+            findings_count=3,
+        ))
+        results = store.query_audit()
+        assert len(results) == 1
+        assert results[0].payload_bytes == 4096
+        assert results[0].findings_count == 3
+
+    def test_default_payload_and_findings_are_zero(self, store):
+        """AuditEntry without the new fields defaults both to 0."""
+        store.log_audit(AuditEntry(
+            tool_name="merovingian_graph",
+            parameters="{}",
+            result_summary="ok",
+        ))
+        results = store.query_audit()
+        assert results[0].payload_bytes == 0
+        assert results[0].findings_count == 0
+
+
+class TestSchemaV2Migration:
+    """v2: audit_log extended with payload_bytes + findings_count."""
+
+    def test_fresh_db_has_v2_audit_columns(self, tmp_path):
+        db_path = tmp_path / "fresh_v2.db"
+        with MerovingianStore(db_path) as store:
+            cols = {row[1] for row in store.conn.execute("PRAGMA table_info(audit_log)")}
+            assert "payload_bytes" in cols
+            assert "findings_count" in cols
+            assert store.get_meta("schema_version") == "2"
+
+    def test_v1_db_migrates_to_v2_preserving_rows(self, tmp_path):
+        """A v1 DB with existing audit rows migrates to v2 without data loss."""
+        import sqlite3
+
+        db_path = tmp_path / "v1_to_v2.db"
+        # Build a v1 DB with one audit row (no payload_bytes / findings_count)
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("CREATE TABLE merovingian_meta (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute("INSERT INTO merovingian_meta VALUES ('schema_version', '1')")
+        conn.execute("""CREATE TABLE audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tool_name TEXT NOT NULL,
+            parameters TEXT NOT NULL,
+            result_summary TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )""")
+        from datetime import datetime, timezone
+        conn.execute(
+            "INSERT INTO audit_log (tool_name, parameters, result_summary, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            ("merovingian_register", "{}", "ok", datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+        conn.close()
+
+        with MerovingianStore(db_path) as store:
+            assert store.get_meta("schema_version") == "2"
+            cur = store.conn.execute(
+                "SELECT tool_name, payload_bytes, findings_count FROM audit_log"
+            )
+            rows = cur.fetchall()
+            assert len(rows) == 1
+            assert rows[0][0] == "merovingian_register"
+            assert rows[0][1] == 0  # default payload_bytes
+            assert rows[0][2] == 0  # default findings_count
+
+    def test_migration_idempotent(self, tmp_path):
+        """Running the v1→v2 migration twice does not error."""
+        db_path = tmp_path / "idemp.db"
+        with MerovingianStore(db_path) as store:
+            store._migrate_v1_to_v2()
+            store._migrate_v1_to_v2()
+            cols = {row[1] for row in store.conn.execute("PRAGMA table_info(audit_log)")}
+            assert "payload_bytes" in cols
+            assert "findings_count" in cols
